@@ -9,5 +9,7 @@ impl FilterTrackInteractor {
 }
 
 impl FilterTrackUseCase for FilterTrackInteractor {
-    fn filter_current_track(&self) {}
+    fn filter_current_track(&self) {
+        println!("Filtered.")
+    }
 }

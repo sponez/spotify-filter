@@ -9,5 +9,7 @@ impl SignOutInteractor {
 }
 
 impl SignOutUseCase for SignOutInteractor {
-    fn sign_out(&self) {}
+    fn sign_out(&self) {
+        println!("Signed out.")
+    }
 }

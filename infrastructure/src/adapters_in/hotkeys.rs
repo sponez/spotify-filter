@@ -100,45 +100,45 @@ fn parse_code(s: &str) -> Code {
 /// Must be kept alive for hotkeys to remain active.
 pub struct HotkeyAdapter {
     _manager: GlobalHotKeyManager,
-    discard_id: u32,
-    like_id: u32,
+    filter_id: u32,
+    pass_id: u32,
 }
 
 impl HotkeyAdapter {
     /// Register hotkeys from strings like `"Ctrl+Alt+D"`.
-    pub fn new(discard: &str, like: &str) -> Self {
-        let hotkey_discard = parse_hotkey(discard);
-        let hotkey_like = parse_hotkey(like);
+    pub fn new(filter: &str, pass: &str) -> Self {
+        let hotkey_filter = parse_hotkey(filter);
+        let hotkey_pass = parse_hotkey(pass);
 
-        let discard_id = hotkey_discard.id();
-        let like_id = hotkey_like.id();
+        let filter_id = hotkey_filter.id();
+        let pass_id = hotkey_pass.id();
 
         let manager = GlobalHotKeyManager::new().expect("failed to create hotkey manager");
         manager
-            .register(hotkey_discard)
-            .expect("failed to register discard hotkey");
+            .register(hotkey_filter)
+            .expect("failed to register filter hotkey");
         manager
-            .register(hotkey_like)
-            .expect("failed to register like hotkey");
+            .register(hotkey_pass)
+            .expect("failed to register pass hotkey");
 
         Self {
             _manager: manager,
-            discard_id,
-            like_id,
+            filter_id,
+            pass_id,
         }
     }
 
     /// Drain all pending hotkey events and call the appropriate callback.
     /// Call this once per timer tick from the GUI event loop.
-    pub fn poll(&self, on_discard: impl Fn(), on_like: impl Fn()) {
+    pub fn poll(&self, on_filter: impl Fn(), on_pass: impl Fn()) {
         while let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
             if event.state != HotKeyState::Pressed {
                 continue;
             }
-            if event.id == self.discard_id {
-                on_discard();
-            } else if event.id == self.like_id {
-                on_like();
+            if event.id == self.filter_id {
+                on_filter();
+            } else if event.id == self.pass_id {
+                on_pass();
             }
         }
     }

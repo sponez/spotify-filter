@@ -6,5 +6,5 @@ redirect_uri = "http://127.0.0.1:8888/callback"
 get-track = "v1/tracks/{id}"
 
 [hotkeys]
-discard = "Ctrl+Alt+D"
-like = "Ctrl+Alt+L"
+filter = "Ctrl+Alt+D"
+pass = "Ctrl+Alt+L"

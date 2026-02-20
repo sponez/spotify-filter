@@ -45,7 +45,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let config = Configuration::load();
     let _settings = Settings::load();
 
-    let hotkey_adapter = HotkeyAdapter::new(&config.hotkeys.discard, &config.hotkeys.like);
+    let hotkey_adapter = HotkeyAdapter::new(&config.hotkeys.filter, &config.hotkeys.pass);
 
     let (icon_rgba, width, height) = load_icon_rgba();
     let tray_adapter = TrayAdapter::new(icon_rgba, width, height);

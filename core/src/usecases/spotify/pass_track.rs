@@ -9,5 +9,7 @@ impl PassTrackInteractor {
 }
 
 impl PassTrackUseCase for PassTrackInteractor {
-    fn pass_current_track(&self) {}
+    fn pass_current_track(&self) {
+        println!("Passed.")
+    }
 }

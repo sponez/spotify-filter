@@ -9,5 +9,7 @@ impl SignInInteractor {
 }
 
 impl SignInUseCase for SignInInteractor {
-    fn sign_in(&self) {}
+    fn sign_in(&self) {
+        println!("Signed in.")
+    }
 }
