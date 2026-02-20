@@ -2683,6 +2683,8 @@ dependencies = [
  "core",
  "global-hotkey",
  "keyring",
+ "serde",
+ "serde_json",
  "tray-icon",
 ]
 

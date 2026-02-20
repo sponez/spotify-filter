@@ -1,6 +1,9 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use domain::ports::ports_in::spotify::spotify_facade::SpotifyFacade;
+use domain::ports::ports_in::{
+    settings::settings_facade::SettingsFacade,
+    spotify::spotify_facade::SpotifyFacade,
+};
 use slint::run_event_loop_until_quit;
 
 use infrastructure::adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter};
@@ -11,14 +14,13 @@ pub fn run(
     tray: TrayAdapter,
     hotkeys: HotkeyAdapter,
     spotify_facade: SpotifyFacade,
-    current_settings: Arc<Mutex<(i32, i32, i32)>>,
-    on_save: Box<dyn Fn(i32, i32, i32) + 'static>,
+    settings_facade: SettingsFacade,
 ) -> Result<(), slint::PlatformError> {
+    let settings_facade = Arc::new(settings_facade);
     let window = UiWindow::create_and_set_up_callbacks(
         Arc::clone(&spotify_facade.sign_in),
         Arc::clone(&spotify_facade.sign_out),
-        current_settings,
-        on_save,
+        settings_facade,
     );
     let tray = Arc::new(tray);
     let hotkeys = Arc::new(hotkeys);
