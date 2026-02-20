@@ -1,0 +1,100 @@
+import { Button, ComboBox, VerticalBox, HorizontalBox, GridBox } from "std-widgets.slint";
+import { FilterActionEnum } from "app_state.slint";
+
+export component SettingsView {
+    width: 360px;
+    height: 320px;
+
+    in-out property <FilterActionEnum> filter-action: FilterActionEnum.None_;
+    in-out property <int>              filter-target-type: 0;   // 0=Liked Songs, 1=Playlist
+    in-out property <[string]>         filter-playlist-model: [];
+    in-out property <int>              filter-playlist-index: -1;
+
+    callback back();
+    callback save();
+
+    property <bool> action-active: root.filter-action != FilterActionEnum.None_;
+    property <bool> playlist-active: root.action-active && root.filter-target-type == 1;
+
+    VerticalBox {
+        padding: 20px;
+        spacing: 12px;
+
+        Text {
+            text: "Settings";
+            font-size: 16px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        GridBox {
+            spacing: 8px;
+
+            // Row 0 — Filter action
+            Text {
+                row: 0; col: 0;
+                text: "Filter action:";
+                vertical-alignment: center;
+            }
+            ComboBox {
+                row: 0; col: 1;
+                model: ["None", "Add to playlist", "Move to playlist"];
+                current-index: root.filter-action == FilterActionEnum.None_         ? 0
+                             : root.filter-action == FilterActionEnum.AddToPlaylist  ? 1 : 2;
+                selected(v) => {
+                    if v == "None"             { root.filter-action = FilterActionEnum.None_; }
+                    if v == "Add to playlist"  { root.filter-action = FilterActionEnum.AddToPlaylist; }
+                    if v == "Move to playlist" { root.filter-action = FilterActionEnum.MoveToPlaylist; }
+                }
+            }
+
+            // Row 1 — Target type
+            Text {
+                row: 1; col: 0;
+                text: "Target:";
+                vertical-alignment: center;
+                opacity: root.action-active ? 1.0 : 0.35;
+            }
+            ComboBox {
+                row: 1; col: 1;
+                model: ["Liked Songs", "Playlist"];
+                current-index: root.filter-target-type;
+                enabled: root.action-active;
+                selected(v) => {
+                    if v == "Liked Songs" { root.filter-target-type = 0; }
+                    if v == "Playlist"    { root.filter-target-type = 1; }
+                }
+            }
+
+            // Row 2 — Playlist
+            Text {
+                row: 2; col: 0;
+                text: "Playlist:";
+                vertical-alignment: center;
+                opacity: root.playlist-active ? 1.0 : 0.35;
+            }
+            ComboBox {
+                row: 2; col: 1;
+                model: root.filter-playlist-model;
+                current-index <=> root.filter-playlist-index;
+                enabled: root.playlist-active;
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        HorizontalBox {
+            spacing: 8px;
+            alignment: end;
+            Button {
+                text: "Back";
+                clicked => { root.back(); }
+            }
+            Button {
+                text: "Save";
+                primary: true;
+                clicked => { root.save(); }
+            }
+        }
+    }
+}

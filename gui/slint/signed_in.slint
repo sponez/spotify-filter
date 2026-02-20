@@ -3,42 +3,67 @@ import { Button, VerticalBox } from "std-widgets.slint";
 export component SignedInView {
     width: 360px;
     height: 240px;
-    
-    VerticalBox {
-        padding: 24px;
-        spacing: 12px;
 
-        Text {
-            text: "Spotify Filter is running";
-            font-size: 16px;
-            font-weight: 700;
-            horizontal-alignment: center;
+    callback open-settings();
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+
+        VerticalBox {
+            padding: 24px;
+            spacing: 12px;
+
+            Text {
+                text: "Spotify Filter is running";
+                font-size: 16px;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: "The app is active in the system tray.\nClose this window to keep it running in the background.";
+                font-size: 12px;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+                color: #888888;
+            }
+
+            Text {
+                text: "Hotkeys (coming soon):";
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            Text {
+                text: "• Remove from playlist + skip next";
+                font-size: 12px;
+                color: #888888;
+            }
+
+            Text {
+                text: "• Like + remove from playlist + skip next";
+                font-size: 12px;
+                color: #888888;
+            }
         }
 
-        Text {
-            text: "The app is active in the system tray.\nClose this window to keep it running in the background.";
-            font-size: 12px;
-            wrap: word-wrap;
-            horizontal-alignment: center;
-            color: #888888;
-        }
+        ta-gear := TouchArea {
+            width: 28px;
+            height: 28px;
+            x: root.width - self.width - 8px;
+            y: 8px;
+            clicked => { root.open-settings(); }
 
-        Text {
-            text: "Hotkeys (coming soon):";
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        Text {
-            text: "• Remove from playlist + skip next";
-            font-size: 12px;
-            color: #888888;
-        }
-
-        Text {
-            text: "• Like + remove from playlist + skip next";
-            font-size: 12px;
-            color: #888888;
+            Text {
+                text: "⚙";
+                font-size: 18px;
+                width: 100%;
+                height: 100%;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                color: ta-gear.has-hover ? #555555 : #888888;
+            }
         }
     }
 }

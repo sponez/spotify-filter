@@ -1,16 +1,24 @@
-import { AppStateEnum } from "app_state.slint";
-import { LoginView } from "login.slint";
+import { AppStateEnum, FilterActionEnum } from "app_state.slint";
+import { LoginView }          from "login.slint";
 import { LoginInProcessView } from "await_login.slint";
-import { SignedInView } from "signed_in.slint";
+import { SignedInView }       from "signed_in.slint";
+import { SettingsView }       from "settings.slint";
 
 export component AppWindow inherits Window {
     width: 360px;
-    height: 240px;
+    height: state == AppStateEnum.Settings ? 320px : 240px;
     title: "Spotify Filter";
-    in-out property<AppStateEnum> state: AppStateEnum.Login;
+
+    in-out property <AppStateEnum>     state: AppStateEnum.Login;
+    in-out property <FilterActionEnum> filter-action: FilterActionEnum.None_;
+    in-out property <int>              filter-target-type: 0;
+    in-out property <[string]>         filter-playlist-model: [];
+    in-out property <int>              filter-playlist-index: -1;
 
     callback sign-in();
     callback sign-out();
+    callback open-settings();
+    callback save-settings();
 
     LoginView {
         visible: state == AppStateEnum.Login;
@@ -23,5 +31,16 @@ export component AppWindow inherits Window {
 
     SignedInView {
         visible: state == AppStateEnum.SignedIn;
+        open-settings => { root.open-settings(); }
+    }
+
+    SettingsView {
+        visible: state == AppStateEnum.Settings;
+        filter-action          <=> root.filter-action;
+        filter-target-type     <=> root.filter-target-type;
+        filter-playlist-model  <=> root.filter-playlist-model;
+        filter-playlist-index  <=> root.filter-playlist-index;
+        back => { root.state = AppStateEnum.SignedIn; }
+        save => { root.save-settings(); root.state = AppStateEnum.SignedIn; }
     }
 }

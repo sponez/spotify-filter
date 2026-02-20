@@ -1,17 +1,33 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use infrastructure::adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter};
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
 
-use crate::{AppStateEnum, AppWindow};
+use crate::{AppStateEnum, AppWindow, FilterActionEnum};
 
 use domain::ports::ports_in::spotify::{
     spotify_facade::SpotifyFacade,
     usecases::{
         sign_in::SignInUseCase,
-        sign_out::SignOutUseCase
-    }
+        sign_out::SignOutUseCase,
+    },
 };
+
+fn filter_action_to_int(a: FilterActionEnum) -> i32 {
+    match a {
+        FilterActionEnum::None => 0,
+        FilterActionEnum::AddToPlaylist => 1,
+        FilterActionEnum::MoveToPlaylist => 2,
+    }
+}
+
+fn int_to_filter_action(n: i32) -> FilterActionEnum {
+    match n {
+        1 => FilterActionEnum::AddToPlaylist,
+        2 => FilterActionEnum::MoveToPlaylist,
+        _ => FilterActionEnum::None,
+    }
+}
 
 pub struct UiWindow {
     window: AppWindow,
@@ -23,7 +39,8 @@ impl UiWindow {
         let window_weak = self.window.as_weak();
         self.window.window().on_close_requested(move || {
             if let Some(w) = window_weak.upgrade() {
-                if w.get_state() == AppStateEnum::SignedIn {
+                let state = w.get_state();
+                if state == AppStateEnum::SignedIn || state == AppStateEnum::Settings {
                     w.window().hide().ok();
                     return CloseRequestResponse::KeepWindowShown;
                 }
@@ -56,9 +73,40 @@ impl UiWindow {
         });
     }
 
+    fn setup_open_settings_callback(&self, current: Arc<Mutex<(i32, i32, i32)>>) {
+        let w = self.window.as_weak();
+        self.window.on_open_settings(move || {
+            if let Some(w) = w.upgrade() {
+                let (a, t, pi) = *current.lock().unwrap();
+                w.set_filter_action(int_to_filter_action(a));
+                w.set_filter_target_type(t);
+                w.set_filter_playlist_index(pi);
+                w.set_state(AppStateEnum::Settings);
+            }
+        });
+    }
+
+    fn setup_save_settings_callback(
+        &self,
+        on_save: Box<dyn Fn(i32, i32, i32) + 'static>,
+    ) {
+        let w = self.window.as_weak();
+        self.window.on_save_settings(move || {
+            if let Some(w) = w.upgrade() {
+                on_save(
+                    filter_action_to_int(w.get_filter_action()),
+                    w.get_filter_target_type(),
+                    w.get_filter_playlist_index(),
+                );
+            }
+        });
+    }
+
     pub fn create_and_set_up_callbacks(
         sign_in: Arc<dyn SignInUseCase>,
         sign_out: Arc<dyn SignOutUseCase>,
+        current_settings: Arc<Mutex<(i32, i32, i32)>>,
+        on_save: Box<dyn Fn(i32, i32, i32) + 'static>,
     ) -> Self {
         let window = AppWindow::new().expect("Failed to create main window");
         let ui_window = Self {
@@ -69,6 +117,8 @@ impl UiWindow {
         ui_window.setup_close_handler();
         ui_window.setup_sign_in_callback(sign_in);
         ui_window.setup_sign_out_callback(sign_out);
+        ui_window.setup_open_settings_callback(current_settings);
+        ui_window.setup_save_settings_callback(on_save);
 
         ui_window
     }

@@ -2,5 +2,14 @@ export enum AppStateEnum {
     Login,
     AwaitLogin,
     SignedIn,
-    ErrorLogin
+    ErrorLogin,
+    Settings
+}
+
+// Mirrors application::settings::AdditionalFilterAction.
+// Int mapping: 0=None_, 1=AddToPlaylist, 2=MoveToPlaylist
+export enum FilterActionEnum {
+    None_,
+    AddToPlaylist,
+    MoveToPlaylist
 }
