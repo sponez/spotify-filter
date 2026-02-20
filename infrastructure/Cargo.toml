@@ -1,0 +1,10 @@
+[package]
+name = "infrastructure"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+domain = { path = "../core", package = "core" }
+keyring = "3"
+global-hotkey = "0.7"
+tray-icon = "0.21"

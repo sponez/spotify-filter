@@ -1,0 +1,44 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+
+export component SignedInView {
+    width: 360px;
+    height: 240px;
+    
+    VerticalBox {
+        padding: 24px;
+        spacing: 12px;
+
+        Text {
+            text: "Spotify Filter is running";
+            font-size: 16px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: "The app is active in the system tray.\nClose this window to keep it running in the background.";
+            font-size: 12px;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+            color: #888888;
+        }
+
+        Text {
+            text: "Hotkeys (coming soon):";
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        Text {
+            text: "• Remove from playlist + skip next";
+            font-size: 12px;
+            color: #888888;
+        }
+
+        Text {
+            text: "• Like + remove from playlist + skip next";
+            font-size: 12px;
+            color: #888888;
+        }
+    }
+}

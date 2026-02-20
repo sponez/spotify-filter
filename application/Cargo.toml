@@ -1,0 +1,13 @@
+[package]
+name = "application"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+domain = { path = "../core", package = "core" }
+gui = { path = "../gui" }
+infrastructure = { path = "../infrastructure" }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+dotenvy = "0.15"
+image = "0.25"

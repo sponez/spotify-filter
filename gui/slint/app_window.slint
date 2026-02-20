@@ -1,0 +1,27 @@
+import { AppStateEnum } from "app_state.slint";
+import { LoginView } from "login.slint";
+import { LoginInProcessView } from "await_login.slint";
+import { SignedInView } from "signed_in.slint";
+
+export component AppWindow inherits Window {
+    width: 360px;
+    height: 240px;
+    title: "Spotify Filter";
+    in-out property<AppStateEnum> state: AppStateEnum.Login;
+
+    callback sign-in();
+    callback sign-out();
+
+    LoginView {
+        visible: state == AppStateEnum.Login;
+        signIn => { root.sign-in(); }
+    }
+
+    LoginInProcessView {
+        visible: state == AppStateEnum.AwaitLogin;
+    }
+
+    SignedInView {
+        visible: state == AppStateEnum.SignedIn;
+    }
+}
