@@ -1,9 +1,0 @@
-app:
-  spotify:
-    url: https://api.spotify.com/
-    redirect_uri: http://127.0.0.1:8888/callback
-    paths:
-      get-track: v1/tracks/{id}
-hotkeys:
-  discard: Ctrl+Alt+D
-  like: Ctrl+Alt+L

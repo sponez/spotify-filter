@@ -8,6 +8,8 @@ domain = { path = "../core", package = "core" }
 gui = { path = "../gui" }
 infrastructure = { path = "../infrastructure" }
 serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
+toml = "0.8"
+serde_json = "1"
+slint = "1.15"
 dotenvy = "0.15"
 image = "0.25"

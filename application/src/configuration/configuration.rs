@@ -23,12 +23,12 @@ impl Configuration {
             dotenvy::dotenv().ok();
         }
 
-        let contents = std::fs::read_to_string(dir.join("configuration.yaml"))
-            .or_else(|_| std::fs::read_to_string("configuration.yaml"))
-            .expect("cannot read configuration.yaml");
+        let contents = std::fs::read_to_string(dir.join("configuration.toml"))
+            .or_else(|_| std::fs::read_to_string("configuration.toml"))
+            .expect("cannot read configuration.toml");
 
-        let mut config: Self = serde_yaml::from_str(&contents)
-            .unwrap_or_else(|e| panic!("invalid configuration.yaml: {e}"));
+        let mut config: Self = toml::from_str(&contents)
+            .unwrap_or_else(|e| panic!("invalid configuration.toml: {e}"));
 
         config.app.spotify.client_id = std::env::var("SPOTIFY_CLIENT_ID")
             .expect("SPOTIFY_CLIENT_ID must be set in .env");

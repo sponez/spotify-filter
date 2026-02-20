@@ -4,7 +4,7 @@ use slint::{CloseRequestResponse, ComponentHandle};
 
 use crate::{AppStateEnum, AppWindow};
 
-use domain::ports::ports_in::spotify;
+use domain::ports::ports_in::spotify::usecases::{sign_in::SignInUseCase, sign_out::SignOutUseCase};
 
 pub fn setup_close_handler(window: &AppWindow) {
     let window_weak = window.as_weak();
@@ -20,7 +20,7 @@ pub fn setup_close_handler(window: &AppWindow) {
     });
 }
 
-pub fn setup_sign_in_callback(window: &AppWindow, auth: Arc<dyn spotify::SignInUseCase>) {
+pub fn setup_sign_in_callback(window: &AppWindow, auth: Arc<dyn SignInUseCase>) {
     let window_weak = window.as_weak();
     window.on_sign_in(move || {
         if let Some(w) = window_weak.upgrade() {
@@ -31,7 +31,7 @@ pub fn setup_sign_in_callback(window: &AppWindow, auth: Arc<dyn spotify::SignInU
     });
 }
 
-pub fn setup_sign_out_callback(window: &AppWindow, auth: Arc<dyn spotify::SignOutUseCase>) {
+pub fn setup_sign_out_callback(window: &AppWindow, auth: Arc<dyn SignOutUseCase>) {
     let window_weak = window.as_weak();
     window.on_sign_out(move || {
         if let Some(w) = window_weak.upgrade() {

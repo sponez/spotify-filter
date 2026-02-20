@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Timer, TimerMode};
 
-use domain::ports::ports_in::spotify::{PlayerUseCase, SignOutUseCase};
+use domain::ports::ports_in::spotify::{spotify_facade::SpotifyFacade};
 use infrastructure::adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter};
 
 use crate::{AppStateEnum, AppWindow};
@@ -15,8 +15,7 @@ pub fn start_event_poll(
     window: &AppWindow,
     tray: Arc<TrayAdapter>,
     hotkeys: Arc<HotkeyAdapter>,
-    player: Arc<dyn PlayerUseCase>,
-    auth: Arc<dyn SignOutUseCase>,
+    spotify_facade: Arc<SpotifyFacade>,
 ) -> Timer {
     let window_weak = window.as_weak();
     let timer = Timer::default();
@@ -27,16 +26,16 @@ pub fn start_event_poll(
         move || {
             let Some(w) = window_weak.upgrade() else { return };
             let w2 = window_weak.clone();
-            let auth_clone = Arc::clone(&auth);
-            let player_discard = Arc::clone(&player);
-            let player_like = Arc::clone(&player);
+            let sign_out_clone = Arc::clone(&spotify_facade.sign_out);
+            let pass_track_clone = Arc::clone(&spotify_facade.pass_track);
+            let filter_track_clone = Arc::clone(&spotify_facade.filter_track);
 
             tray.poll(
                 move || {
                     w.window().show().ok();
                 },
                 move || {
-                    auth_clone.sign_out();
+                    sign_out_clone.sign_out();
                     if let Some(win) = w2.upgrade() {
                         win.set_state(AppStateEnum::Login);
                         win.window().show().ok();
@@ -49,10 +48,10 @@ pub fn start_event_poll(
 
             hotkeys.poll(
                 move || {
-                    player_discard.discard_track();
+                    filter_track_clone.filter_current_track();
                 },
                 move || {
-                    player_like.like_and_discard_track();
+                    pass_track_clone.pass_current_track();
                 },
             );
         },
