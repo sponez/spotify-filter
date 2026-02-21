@@ -23,7 +23,7 @@ use domain::{
         },
     },
 };
-use gui::run;
+use gui;
 use image::GenericImageView;
 
 use configuration::configuration::Configuration;
@@ -64,14 +64,14 @@ fn create_settings_facade() -> SettingsFacade {
 fn main() -> Result<(), slint::PlatformError> {
     let config = Configuration::load();
 
-    let hotkey_adapter = HotkeyEventListener::new(&config.hotkeys.filter, &config.hotkeys.pass);
+    let hotkey_listener = HotkeyEventListener::new(&config.hotkeys.filter, &config.hotkeys.pass);
 
     let (icon_rgba, width, height) = load_icon_rgba();
-    let tray_adapter = TrayEventListener::new(icon_rgba, width, height);
+    let tray_listener = TrayEventListener::new(icon_rgba, width, height);
 
-    run::run(
-        tray_adapter,
-        hotkey_adapter,
+    gui::starter::run(
+        tray_listener,
+        hotkey_listener,
         create_spotify_facade(),
         create_settings_facade(),
     )
