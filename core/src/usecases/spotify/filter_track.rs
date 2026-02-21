@@ -1,4 +1,4 @@
-use crate::ports::ports_in::spotify::usecases::filter_track::FilterTrackUseCase;
+use crate::{errors::errors::AppResult, ports::ports_in::spotify::usecases::filter_track::FilterTrackUseCase};
 
 pub struct FilterTrackInteractor;
 
@@ -9,7 +9,9 @@ impl FilterTrackInteractor {
 }
 
 impl FilterTrackUseCase for FilterTrackInteractor {
-    fn filter_current_track(&self) {
-        println!("Filtered.")
+    fn filter_current_track(&self) -> AppResult<()> {
+        println!("Filtered.");
+        
+        Ok(())
     }
 }

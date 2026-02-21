@@ -62,6 +62,10 @@ fn create_settings_facade() -> SettingsFacade {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .init();
+
     let config = Configuration::load();
 
     let hotkey_listener = HotkeyEventListener::new(&config.hotkeys.filter, &config.hotkeys.pass);

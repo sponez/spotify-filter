@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+anyhow = "1"
 domain = { path = "../core", package = "core" }
 keyring = "3"
 global-hotkey = "0.7"

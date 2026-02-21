@@ -1,4 +1,4 @@
-use crate::ports::ports_in::spotify::usecases::sign_in::SignInUseCase;
+use crate::{errors::errors::AppResult, ports::ports_in::spotify::usecases::sign_in::SignInUseCase};
 
 pub struct SignInInteractor;
 
@@ -9,7 +9,9 @@ impl SignInInteractor {
 }
 
 impl SignInUseCase for SignInInteractor {
-    fn sign_in(&self) {
-        println!("Signed in.")
+    fn sign_in(&self) -> AppResult<()> {
+        println!("Signed in.");
+        
+        Ok(())
     }
 }

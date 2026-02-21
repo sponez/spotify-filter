@@ -1,4 +1,4 @@
-use crate::ports::ports_in::spotify::usecases::sign_out::SignOutUseCase;
+use crate::{errors::errors::AppResult, ports::ports_in::spotify::usecases::sign_out::SignOutUseCase};
 
 pub struct SignOutInteractor;
 
@@ -9,7 +9,9 @@ impl SignOutInteractor {
 }
 
 impl SignOutUseCase for SignOutInteractor {
-    fn sign_out(&self) {
-        println!("Signed out.")
+    fn sign_out(&self) -> AppResult<()> {
+        println!("Signed out.");
+        
+        Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use crate::ports::ports_in::spotify::usecases::pass_track::PassTrackUseCase;
+use crate::{errors::errors::AppResult, ports::ports_in::spotify::usecases::pass_track::PassTrackUseCase};
 
 pub struct PassTrackInteractor;
 
@@ -9,7 +9,9 @@ impl PassTrackInteractor {
 }
 
 impl PassTrackUseCase for PassTrackInteractor {
-    fn pass_current_track(&self) {
-        println!("Passed.")
+    fn pass_current_track(&self) -> AppResult<()> {
+        println!("Passed.");
+        
+        Ok(())
     }
 }
