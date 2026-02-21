@@ -16,9 +16,13 @@ pub fn setup_open_settings_callback(window: &AppWindow, get_settings: Arc<dyn Ge
     let w = window.as_weak();
     window.on_open_settings(move || {
         if let Some(w) = w.upgrade() {
-            let view = get_settings.get_settings();
-            apply_settings_view_to_window(&w, view);
-            w.set_state(AppStateEnum::Settings);
+            match get_settings.get_settings() {
+                Ok(view) => {
+                    apply_settings_view_to_window(&w, view);
+                    w.set_state(AppStateEnum::Settings);
+                }
+                Err(_) => {}
+            }
         }
     });
 }
@@ -32,7 +36,9 @@ pub fn setup_save_settings_callback(window: &AppWindow, save_settings: Arc<dyn S
                 w.get_filter_target_type(),
                 w.get_filter_playlist_index(),
             );
-            save_settings.save_settings(SaveSettingsCommand { filter_action, filter_target });
+            if save_settings.save_settings(SaveSettingsCommand { filter_action, filter_target }).is_ok() {
+                w.set_state(AppStateEnum::SignedIn);
+            }
         }
     });
 }

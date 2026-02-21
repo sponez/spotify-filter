@@ -41,6 +41,6 @@ export component AppWindow inherits Window {
         filter-playlist-model  <=> root.filter-playlist-model;
         filter-playlist-index  <=> root.filter-playlist-index;
         back => { root.state = AppStateEnum.SignedIn; }
-        save => { root.save-settings(); root.state = AppStateEnum.SignedIn; }
+        save => { root.save-settings(); }
     }
 }

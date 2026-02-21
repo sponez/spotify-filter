@@ -98,13 +98,13 @@ fn parse_code(s: &str) -> Code {
 
 /// Owns the [`GlobalHotKeyManager`] and registered hotkeys.
 /// Must be kept alive for hotkeys to remain active.
-pub struct HotkeyAdapter {
+pub struct HotkeyEventListener {
     _manager: GlobalHotKeyManager,
     filter_id: u32,
     pass_id: u32,
 }
 
-impl HotkeyAdapter {
+impl HotkeyEventListener {
     /// Register hotkeys from strings like `"Ctrl+Alt+D"`.
     pub fn new(filter: &str, pass: &str) -> Self {
         let hotkey_filter = parse_hotkey(filter);

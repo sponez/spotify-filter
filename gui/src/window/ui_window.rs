@@ -4,17 +4,16 @@ use domain::ports::ports_in::{
     settings::settings_facade::SettingsFacade,
     spotify::usecases::{sign_in::SignInUseCase, sign_out::SignOutUseCase},
 };
-use infrastructure::adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter};
+use infrastructure::adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener};
 
 use slint::ComponentHandle;
 
-use crate::AppWindow;
+use crate::{AppStateEnum, AppWindow};
 use crate::window::{
     callbacks::{
         auth::{setup_close_handler, setup_sign_in_callback, setup_sign_out_callback},
         settings::{setup_open_settings_callback, setup_save_settings_callback},
-    },
-    event_poll::start_event_poll,
+    }
 };
 
 use domain::ports::ports_in::spotify::spotify_facade::SpotifyFacade;
@@ -48,10 +47,49 @@ impl UiWindow {
 
     pub fn start_event_poll(
         &self,
-        tray: Arc<TrayAdapter>,
-        hotkeys: Arc<HotkeyAdapter>,
+        tray: Arc<TrayEventListener>,
+        hotkeys: Arc<HotkeyEventListener>,
         spotify_facade: Arc<SpotifyFacade>,
     ) {
-        start_event_poll(&self.window, &self.timer, tray, hotkeys, spotify_facade);
+        let window_weak = self.window.as_weak();
+
+        self.timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(100),
+            move || {
+                let Some(w) = window_weak.upgrade() else { return };
+                let w2 = window_weak.clone();
+                let sign_out_clone = Arc::clone(&spotify_facade.sign_out);
+                let pass_track_clone = Arc::clone(&spotify_facade.pass_track);
+                let filter_track_clone = Arc::clone(&spotify_facade.filter_track);
+
+                tray.poll(
+                    move || {
+                        w.window().show().ok();
+                    },
+                    move || {
+                        if sign_out_clone.sign_out().is_err() {
+                            return;
+                        }
+                        if let Some(win) = w2.upgrade() {
+                            win.set_state(AppStateEnum::Login);
+                            win.window().show().ok();
+                        }
+                    },
+                    || {
+                        slint::quit_event_loop().ok();
+                    },
+                );
+
+                hotkeys.poll(
+                    move || {
+                        let _ = filter_track_clone.filter_current_track();
+                    },
+                    move || {
+                        let _ = pass_track_clone.pass_current_track();
+                    },
+                );
+            },
+        );
     }
 }

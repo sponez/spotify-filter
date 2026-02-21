@@ -1,4 +1,4 @@
 slint::include_modules!();
 
-pub mod run;
+pub mod starter;
 pub mod window;
