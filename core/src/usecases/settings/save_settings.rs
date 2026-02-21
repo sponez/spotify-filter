@@ -5,16 +5,16 @@ use crate::ports::{
         models::SaveSettingsCommand,
         usecases::save_settings::SaveSettingsUseCase,
     },
-    ports_out::settings::{SettingsCachePort, SettingsFilePort},
+    ports_out::repository::settings::{SettingsCache, SettingsStore},
 };
 
 pub struct SaveSettingsInteractor {
-    cache: Arc<dyn SettingsCachePort>,
-    file: Arc<dyn SettingsFilePort>,
+    cache: Arc<dyn SettingsCache>,
+    file: Arc<dyn SettingsStore>,
 }
 
 impl SaveSettingsInteractor {
-    pub fn new(cache: Arc<dyn SettingsCachePort>, file: Arc<dyn SettingsFilePort>) -> Self {
+    pub fn new(cache: Arc<dyn SettingsCache>, file: Arc<dyn SettingsStore>) -> Self {
         Self { cache, file }
     }
 }

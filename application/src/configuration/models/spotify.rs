@@ -10,11 +10,22 @@ pub enum SpotifyAction {
 
 #[derive(Deserialize)]
 pub struct SpotifyConfig {
+    pub api: SpotifyApiConfig,
+    pub auth: SpotifyAuthConfig,
+}
+
+#[derive(Deserialize)]
+pub struct SpotifyApiConfig {
+    pub url: String,
+    pub paths: HashMap<SpotifyAction, String>,
+}
+
+#[derive(Deserialize)]
+pub struct SpotifyAuthConfig {
     #[serde(default)]
     pub client_id: String,
     #[serde(default)]
     pub client_secret: String,
-    pub url: String,
+    pub auth_uri: String,
     pub redirect_uri: String,
-    pub paths: HashMap<SpotifyAction, String>,
 }

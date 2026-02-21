@@ -8,7 +8,7 @@ use domain::{
             settings::settings_facade::SettingsFacade,
             spotify::spotify_facade::SpotifyFacade,
         },
-        ports_out::settings::{SettingsCachePort, SettingsFilePort},
+        ports_out::repository::settings::{SettingsCache, SettingsStore},
     },
     usecases::{
         settings::{
@@ -30,8 +30,8 @@ use configuration::configuration::Configuration;
 use infrastructure::{
     adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter},
     adapters_out::repository::settings::{
-        cache::SettingsCacheAdapter,
-        file::SettingsFileAdapter,
+        cache::LocalSettingsCache,
+        file::JsonFileSettingsStore,
     },
 };
 
@@ -53,8 +53,8 @@ fn create_spotify_facade() -> SpotifyFacade {
 }
 
 fn create_settings_facade() -> SettingsFacade {
-    let cache: Arc<dyn SettingsCachePort> = Arc::new(SettingsCacheAdapter::new());
-    let file: Arc<dyn SettingsFilePort> = Arc::new(SettingsFileAdapter::new());
+    let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
+    let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
     SettingsFacade::new(
         Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file))),
         Arc::new(SaveSettingsInteractor::new(cache, file)),

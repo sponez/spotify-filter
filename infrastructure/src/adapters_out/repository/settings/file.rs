@@ -1,6 +1,6 @@
 use domain::ports::{
     ports_in::settings::models::{FilterActionView, FilterTargetView},
-    ports_out::settings::SettingsFilePort,
+    ports_out::repository::settings::SettingsStore,
 };
 
 use crate::adapters_out::repository::settings::{
@@ -9,9 +9,9 @@ use crate::adapters_out::repository::settings::{
 };
 
 /// Reads and writes `settings.json` next to the binary (fallback: cwd).
-pub struct SettingsFileAdapter;
+pub struct JsonFileSettingsStore;
 
-impl SettingsFileAdapter {
+impl JsonFileSettingsStore {
     pub fn new() -> Self {
         Self
     }
@@ -24,7 +24,7 @@ impl SettingsFileAdapter {
     }
 }
 
-impl SettingsFilePort for SettingsFileAdapter {
+impl SettingsStore for JsonFileSettingsStore {
     fn load(&self) -> (FilterActionView, FilterTargetView) {
         let path = Self::path();
         if path.exists() {

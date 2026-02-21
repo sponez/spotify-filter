@@ -1,9 +1,12 @@
-[app.spotify]
+[app.spotify.api]
 url = "https://api.spotify.com/"
-redirect_uri = "http://127.0.0.1:8888/callback"
 
-[app.spotify.paths]
+[app.spotify.api.paths]
 get-track = "v1/tracks/{id}"
+
+[app.spotify.auth]
+auth_uri = "https://accounts.spotify.com/api/token"
+redirect_uri = "http://127.0.0.1:8888/callback"
 
 [hotkeys]
 filter = "Ctrl+Alt+D"

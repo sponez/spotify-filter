@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use domain::ports::{
     ports_in::settings::models::{FilterActionView, FilterTargetView},
-    ports_out::settings::SettingsCachePort,
+    ports_out::repository::settings::SettingsCache,
 };
 
 use crate::adapters_out::repository::settings::{
@@ -11,17 +11,17 @@ use crate::adapters_out::repository::settings::{
 };
 
 /// In-memory cache — starts cold (`None`), populated on first load.
-pub struct SettingsCacheAdapter {
+pub struct LocalSettingsCache {
     inner: Arc<Mutex<Option<SettingsCacheDto>>>,
 }
 
-impl SettingsCacheAdapter {
+impl LocalSettingsCache {
     pub fn new() -> Self {
         Self { inner: Arc::new(Mutex::new(None)) }
     }
 }
 
-impl SettingsCachePort for SettingsCacheAdapter {
+impl SettingsCache for LocalSettingsCache {
     fn load(&self) -> Option<(FilterActionView, FilterTargetView)> {
         self.inner.lock().unwrap().clone().map(cache_dto_to_view)
     }

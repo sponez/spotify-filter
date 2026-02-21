@@ -30,9 +30,9 @@ impl Configuration {
         let mut config: Self = toml::from_str(&contents)
             .unwrap_or_else(|e| panic!("invalid configuration.toml: {e}"));
 
-        config.app.spotify.client_id = std::env::var("SPOTIFY_CLIENT_ID")
+        config.app.spotify.auth.client_id = std::env::var("SPOTIFY_CLIENT_ID")
             .expect("SPOTIFY_CLIENT_ID must be set in .env");
-        config.app.spotify.client_secret = std::env::var("SPOTIFY_CLIENT_SECRET")
+        config.app.spotify.auth.client_secret = std::env::var("SPOTIFY_CLIENT_SECRET")
             .expect("SPOTIFY_CLIENT_SECRET must be set in .env");
 
         config
