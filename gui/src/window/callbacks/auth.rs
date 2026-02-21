@@ -28,8 +28,10 @@ pub fn setup_sign_in_callback(window: &AppWindow, auth: Arc<dyn SignInUseCase>) 
     window.on_sign_in(move || {
         if let Some(w) = window_weak.upgrade() {
             w.set_state(AppStateEnum::AwaitLogin);
-            auth.sign_in()
-                .expect("Failed to sign in");
+            if auth.sign_in().is_err() {
+                w.set_state(AppStateEnum::Login);
+                return;
+            }
             // TODO: listen for auth completion and transition to SignedIn
             w.set_state(AppStateEnum::SignedIn);
         }
@@ -40,8 +42,9 @@ pub fn setup_sign_out_callback(window: &AppWindow, auth: Arc<dyn SignOutUseCase>
     let window_weak = window.as_weak();
     window.on_sign_out(move || {
         if let Some(w) = window_weak.upgrade() {
-            auth.sign_out()
-                .expect("Failed to sign out");
+            if auth.sign_out().is_err() {
+                return;
+            }
             w.set_state(AppStateEnum::Login);
             w.window().show().ok();
         }
