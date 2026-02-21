@@ -6,13 +6,13 @@ use domain::ports::ports_in::{
 };
 use slint::run_event_loop_until_quit;
 
-use infrastructure::adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter};
+use infrastructure::adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener};
 
 use crate::window::UiWindow;
 
 pub fn run(
-    tray: TrayAdapter,
-    hotkeys: HotkeyAdapter,
+    tray: TrayEventListener,
+    hotkeys: HotkeyEventListener,
     spotify_facade: SpotifyFacade,
     settings_facade: SettingsFacade,
 ) -> Result<(), slint::PlatformError> {
@@ -27,6 +27,6 @@ pub fn run(
     let spotify_facade = Arc::new(spotify_facade);
 
     window.start_event_poll(tray, hotkeys, spotify_facade);
-    window.show().expect("Window cannot be shown.");
+    window.show()?;
     run_event_loop_until_quit()
 }

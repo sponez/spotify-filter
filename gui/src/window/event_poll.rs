@@ -3,15 +3,15 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use domain::ports::ports_in::spotify::spotify_facade::SpotifyFacade;
-use infrastructure::adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter};
+use infrastructure::adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener};
 
 use crate::{AppStateEnum, AppWindow};
 
 pub fn start_event_poll(
     window: &AppWindow,
     timer: &slint::Timer,
-    tray: Arc<TrayAdapter>,
-    hotkeys: Arc<HotkeyAdapter>,
+    tray: Arc<TrayEventListener>,
+    hotkeys: Arc<HotkeyEventListener>,
     spotify_facade: Arc<SpotifyFacade>,
 ) {
     let window_weak = window.as_weak();

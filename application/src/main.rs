@@ -28,7 +28,7 @@ use image::GenericImageView;
 
 use configuration::configuration::Configuration;
 use infrastructure::{
-    adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter},
+    adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener},
     adapters_out::repository::settings::{
         cache::LocalSettingsCache,
         file::JsonFileSettingsStore,
@@ -64,10 +64,10 @@ fn create_settings_facade() -> SettingsFacade {
 fn main() -> Result<(), slint::PlatformError> {
     let config = Configuration::load();
 
-    let hotkey_adapter = HotkeyAdapter::new(&config.hotkeys.filter, &config.hotkeys.pass);
+    let hotkey_adapter = HotkeyEventListener::new(&config.hotkeys.filter, &config.hotkeys.pass);
 
     let (icon_rgba, width, height) = load_icon_rgba();
-    let tray_adapter = TrayAdapter::new(icon_rgba, width, height);
+    let tray_adapter = TrayEventListener::new(icon_rgba, width, height);
 
     run::run(
         tray_adapter,

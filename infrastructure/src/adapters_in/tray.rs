@@ -5,14 +5,14 @@ use tray_icon::{
 
 /// Wraps the system tray icon and its context menu.
 /// Must be kept alive for the tray to remain visible.
-pub struct TrayAdapter {
+pub struct TrayEventListener {
     _icon: TrayIcon,
     id_show: MenuId,
     id_sign_out: MenuId,
     id_quit: MenuId,
 }
 
-impl TrayAdapter {
+impl TrayEventListener {
     /// Create the tray icon from raw RGBA bytes.
     ///
     /// `icon_rgba` must be a flat `width × height × 4` byte buffer in RGBA order.

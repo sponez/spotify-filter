@@ -4,7 +4,7 @@ use domain::ports::ports_in::{
     settings::settings_facade::SettingsFacade,
     spotify::usecases::{sign_in::SignInUseCase, sign_out::SignOutUseCase},
 };
-use infrastructure::adapters_in::{hotkeys::HotkeyAdapter, tray::TrayAdapter};
+use infrastructure::adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener};
 
 use slint::ComponentHandle;
 
@@ -48,8 +48,8 @@ impl UiWindow {
 
     pub fn start_event_poll(
         &self,
-        tray: Arc<TrayAdapter>,
-        hotkeys: Arc<HotkeyAdapter>,
+        tray: Arc<TrayEventListener>,
+        hotkeys: Arc<HotkeyEventListener>,
         spotify_facade: Arc<SpotifyFacade>,
     ) {
         start_event_poll(&self.window, &self.timer, tray, hotkeys, spotify_facade);
