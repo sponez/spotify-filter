@@ -10,10 +10,19 @@ use std::sync::{
 
 use domain::{
     ports::{
-        ports_in::events::{AppRequest, AppResponse},
+        ports_in::{
+            events::{AppRequest, AppResponse},
+            spotify::usecases::try_sign_in::TrySignInUseCase,
+        },
         ports_out::{
+            auth::{auth_url_builder::AuthUrlBuilder, pkce::PkceGenerator},
+            browser::BrowserLauncher,
+            client::spotify_auth::SpotifyAuthClient,
             notification::ErrorNotification,
-            repository::settings::{SettingsCache, SettingsStore},
+            repository::{
+                settings::{SettingsCache, SettingsStore},
+                token::{RefreshTokenStore, TokenCache},
+            },
             server::callback_server::CallbackServer,
         },
     },
@@ -27,6 +36,7 @@ use domain::{
             pass_track::PassTrackInteractor,
             sign_in::SignInInteractor,
             sign_out::SignOutInteractor,
+            try_sign_in::TrySignInInteractor,
         },
     },
 };
@@ -42,10 +52,22 @@ use infrastructure::{
         tray::TrayEventListener,
     },
     adapters_out::{
+        auth::{
+            pkce::Sha256PkceGenerator,
+            spotify_auth_url::SpotifyAuthUrlBuilder,
+        },
+        browser::SystemBrowserLauncher,
+        client::spotify::spotify_auth_client::UreqSpotifyAuthClient,
         notification::ToastErrorNotification,
-        repository::settings::{
-            cache::LocalSettingsCache,
-            file::JsonFileSettingsStore,
+        repository::{
+            settings::{
+                cache::LocalSettingsCache,
+                file::JsonFileSettingsStore,
+            },
+            token::{
+                cache::LocalTokenCache,
+                keyring::KeyringRefreshTokenStore,
+            },
         },
         server::callback_server::TinyHttpCallbackServer,
     },
@@ -60,18 +82,6 @@ fn load_icon_rgba() -> (Vec<u8>, u32, u32) {
     let (width, height) = img.dimensions();
     let rgba = img.into_rgba8().into_raw();
     (rgba, width, height)
-}
-
-fn parse_redirect_uri(uri: &str) -> (String, String) {
-    let parsed = url::Url::parse(uri)
-        .unwrap_or_else(|e| panic!("invalid redirect_uri '{uri}': {e}"));
-    let addr = format!(
-        "{}:{}",
-        parsed.host_str().expect("redirect_uri must have a host"),
-        parsed.port().expect("redirect_uri must have a port"),
-    );
-    let path = parsed.path().to_string();
-    (addr, path)
 }
 
 fn setup_tray_icon(context: &mut ApplicationContext, icon_rgba: Vec<u8>, width: u32, height: u32) -> (MenuId, MenuId, MenuId) {
@@ -121,6 +131,70 @@ fn setup_hotkeys_manager(context: &mut ApplicationContext, filter_hotkey: &str, 
     (filter_id, pass_id)
 }
 
+struct AuthUseCases {
+    sign_in: Arc<SignInInteractor>,
+    sign_out: Arc<SignOutInteractor>,
+    try_sign_in: Arc<TrySignInInteractor>,
+}
+
+fn build_auth_use_cases(
+    config: &Configuration,
+    notifier: Arc<dyn ErrorNotification>,
+) -> AuthUseCases {
+    let parsed = url::Url::parse(&config.app.spotify.auth.redirect_uri)
+        .unwrap_or_else(|e| panic!("invalid redirect_uri '{}': {e}", config.app.spotify.auth.redirect_uri));
+    let addr = format!(
+        "{}:{}",
+        parsed.host_str().expect("redirect_uri must have a host"),
+        parsed.port().expect("redirect_uri must have a port"),
+    );
+    let path = parsed.path().to_string();
+
+    let callback_server: Box<dyn CallbackServer> = Box::new(TinyHttpCallbackServer::new(addr, path));
+    let pkce_generator: Arc<dyn PkceGenerator> = Arc::new(Sha256PkceGenerator);
+    let auth_url_builder: Arc<dyn AuthUrlBuilder> = Arc::new(SpotifyAuthUrlBuilder::new(
+        config.app.spotify.auth.auth_uri.clone(),
+        config.app.spotify.auth.client_id.clone(),
+        config.app.spotify.auth.redirect_uri.clone(),
+        config.app.spotify.auth.scopes.clone(),
+    ));
+    let browser: Arc<dyn BrowserLauncher> = Arc::new(SystemBrowserLauncher);
+    let auth_client: Arc<dyn SpotifyAuthClient> = Arc::new(UreqSpotifyAuthClient::new(
+        config.app.spotify.auth.token_uri.clone(),
+        config.app.spotify.auth.client_id.clone(),
+        config.app.spotify.auth.redirect_uri.clone(),
+    ));
+    let token_cache: Arc<dyn TokenCache> = Arc::new(LocalTokenCache::new());
+    let refresh_token_store: Arc<dyn RefreshTokenStore> = Arc::new(
+        KeyringRefreshTokenStore::new("spotify-filter".into(), "refresh_token".into()),
+    );
+
+    let sign_in = Arc::new(SignInInteractor::new(
+        callback_server,
+        pkce_generator,
+        auth_url_builder,
+        browser,
+        Arc::clone(&auth_client),
+        Arc::clone(&token_cache),
+        Arc::clone(&refresh_token_store),
+        Arc::clone(&notifier),
+    ));
+
+    let sign_out = Arc::new(SignOutInteractor::new(
+        Arc::clone(&token_cache),
+        Arc::clone(&refresh_token_store),
+        notifier,
+    ));
+
+    let try_sign_in = Arc::new(TrySignInInteractor::new(
+        auth_client,
+        token_cache,
+        refresh_token_store,
+    ));
+
+    AuthUseCases { sign_in, sign_out, try_sign_in }
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
@@ -130,12 +204,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let mut context = ApplicationContext::new();
     let notifier: Arc<dyn ErrorNotification> = Arc::new(ToastErrorNotification::new());
 
-    let (addr, path) = parse_redirect_uri(&config.app.spotify.auth.redirect_uri);
-    let callback_server: Box<dyn CallbackServer> = Box::new(TinyHttpCallbackServer::new(addr, path));
-
-    // Use-cases
-    let sign_in = Arc::new(SignInInteractor::new(callback_server, Arc::clone(&notifier)));
-    let sign_out = Arc::new(SignOutInteractor::new(Arc::clone(&notifier)));
+    // Auth use-cases
+    let auth = build_auth_use_cases(&config, Arc::clone(&notifier));
     let pass_track = Arc::new(PassTrackInteractor::new(Arc::clone(&notifier)));
     let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&notifier)));
 
@@ -151,13 +221,20 @@ fn main() -> Result<(), slint::PlatformError> {
     // Shared auth state
     let authorized = Arc::new(AtomicBool::new(false));
 
+    // Try silent sign-in before starting the UI
+    let initially_authorized = matches!(auth.try_sign_in.try_sign_in(), Ok(true));
+    if initially_authorized {
+        authorized.store(true, std::sync::atomic::Ordering::Relaxed);
+        notifier.notify("Spotify Filter is ready");
+    }
+
     // Event dispatcher thread
     let dispatcher = EventDispatcher::new(
         request_rx,
         response_tx,
         Arc::clone(&authorized),
-        sign_in,
-        sign_out,
+        auth.sign_in,
+        auth.sign_out,
         filter_track,
         pass_track,
         get_settings,
@@ -170,12 +247,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let (id_show, id_sign_out, id_quit) = setup_tray_icon(&mut context, icon_rgba, icon_width, icon_height);
     let tray_listener = Arc::new(TrayEventListener::new(id_show, id_sign_out, id_quit));
     tray_listener.start_polling(request_tx.clone());
-    
+
     // Setup hotkeys
     let (id_filter, id_pass) = setup_hotkeys_manager(&mut context, &config.hotkeys.filter, &config.hotkeys.pass);
     let hotkey_listener = Arc::new(HotkeyEventListener::new(id_filter, id_pass));
     hotkey_listener.start_polling(request_tx.clone(), authorized);
 
     // Run GUI event loop
-    gui::starter::run(request_tx, response_rx)
+    gui::starter::run(request_tx, response_rx, initially_authorized)
 }

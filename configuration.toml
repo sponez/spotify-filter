@@ -5,8 +5,17 @@ url = "https://api.spotify.com/"
 get-track = "v1/tracks/{id}"
 
 [app.spotify.auth]
-auth_uri = "https://accounts.spotify.com/api/token"
+auth_uri = "https://accounts.spotify.com/authorize"
+token_uri = "https://accounts.spotify.com/api/token"
 redirect_uri = "http://127.0.0.1:8888/callback"
+scopes = [
+    "user-read-currently-playing",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "playlist-read-private",
+    "playlist-modify-private",
+    "playlist-modify-public",
+]
 
 [hotkeys]
 filter = "Ctrl+Alt+D"

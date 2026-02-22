@@ -1,7 +1,10 @@
 use thiserror::Error;
 
 use crate::ports::ports_out::{
-    repository::settings::SettingsStoreError,
+    repository::{
+        settings::SettingsStoreError,
+        token::TokenStoreError,
+    },
     server::callback_server::CallbackServerError,
 };
 
@@ -12,6 +15,9 @@ pub enum AppError {
 
     #[error(transparent)]
     CallbackServer(#[from] CallbackServerError),
+
+    #[error(transparent)]
+    TokenStore(#[from] TokenStoreError),
 
     #[error("Unexpected: {0}")]
     Unexpected(anyhow::Error),

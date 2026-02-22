@@ -12,8 +12,20 @@ pub enum CallbackServerError {
 
     #[error("Missing authorization code in callback")]
     MissingCode,
+
+    #[error("State mismatch in callback (possible CSRF attack)")]
+    StateMismatch,
+}
+
+pub struct CallbackResponse {
+    pub code: String,
+    pub state: String,
 }
 
 pub trait CallbackServer: Send + Sync {
-    fn wait_for_callback(&self) -> AppResult<String>;
+    fn start(&self) -> AppResult<Box<dyn CallbackHandle>>;
+}
+
+pub trait CallbackHandle: Send {
+    fn wait_for_callback(&self) -> AppResult<CallbackResponse>;
 }

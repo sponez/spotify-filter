@@ -6,7 +6,6 @@ build = "build.rs"
 
 [dependencies]
 domain = { path = "../core", package = "core" }
-infrastructure = { path = "../infrastructure" }
 slint = "1.15"
 
 [build-dependencies]

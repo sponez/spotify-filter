@@ -36,6 +36,10 @@ impl UiWindow {
         self.window.show()
     }
 
+    pub fn set_state(&self, state: AppStateEnum) {
+        self.window.set_state(state);
+    }
+
     pub fn start_event_poll(&self, rx: Receiver<AppResponse>) {
         let window_weak = self.window.as_weak();
 
@@ -49,6 +53,7 @@ impl UiWindow {
                         AppResponse::SignInCompleted(result) => {
                             if result.is_ok() {
                                 w.set_state(AppStateEnum::SignedIn);
+                                w.window().hide().ok();
                             } else {
                                 w.set_state(AppStateEnum::Login);
                             }
