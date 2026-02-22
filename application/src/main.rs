@@ -14,8 +14,12 @@ use domain::{
         ports_out::{
             auth::{auth_url_builder::AuthUrlBuilder, pkce::PkceGenerator},
             browser::BrowserLauncher,
+            client::spotify_auth::SpotifyAuthClient,
             notification::ErrorNotification,
-            repository::settings::{SettingsCache, SettingsStore},
+            repository::{
+                settings::{SettingsCache, SettingsStore},
+                token::{RefreshTokenStore, TokenCache},
+            },
             server::callback_server::CallbackServer,
         },
     },
@@ -49,10 +53,17 @@ use infrastructure::{
             spotify_auth_url::SpotifyAuthUrlBuilder,
         },
         browser::SystemBrowserLauncher,
+        client::spotify::spotify_auth_client::UreqSpotifyAuthClient,
         notification::ToastErrorNotification,
-        repository::settings::{
-            cache::LocalSettingsCache,
-            file::JsonFileSettingsStore,
+        repository::{
+            settings::{
+                cache::LocalSettingsCache,
+                file::JsonFileSettingsStore,
+            },
+            token::{
+                cache::LocalTokenCache,
+                keyring::KeyringRefreshTokenStore,
+            },
         },
         server::callback_server::TinyHttpCallbackServer,
     },
@@ -138,9 +149,25 @@ fn build_sign_in_interactor(
         config.app.spotify.auth.scopes.clone(),
     ));
     let browser: Arc<dyn BrowserLauncher> = Arc::new(SystemBrowserLauncher);
+    let auth_client: Arc<dyn SpotifyAuthClient> = Arc::new(UreqSpotifyAuthClient::new(
+        config.app.spotify.auth.token_uri.clone(),
+        config.app.spotify.auth.client_id.clone(),
+        config.app.spotify.auth.redirect_uri.clone(),
+    ));
+    let token_cache: Arc<dyn TokenCache> = Arc::new(LocalTokenCache::new());
+    let refresh_token_store: Arc<dyn RefreshTokenStore> = Arc::new(
+        KeyringRefreshTokenStore::new("spotify-filter".into(), "refresh_token".into()),
+    );
 
     Arc::new(SignInInteractor::new(
-        callback_server, pkce_generator, auth_url_builder, browser, notifier,
+        callback_server,
+        pkce_generator,
+        auth_url_builder,
+        browser,
+        auth_client,
+        token_cache,
+        refresh_token_store,
+        notifier,
     ))
 }
 
