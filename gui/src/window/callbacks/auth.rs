@@ -28,11 +28,12 @@ pub fn setup_sign_in_callback(window: &AppWindow, auth: Arc<dyn SignInUseCase>) 
     window.on_sign_in(move || {
         if let Some(w) = window_weak.upgrade() {
             w.set_state(AppStateEnum::AwaitLogin);
+            // TODO: sign_in blocks (waits for callback server) — move to a background
+            // thread so the UI can show the spinner without freezing.
             if auth.sign_in().is_err() {
                 w.set_state(AppStateEnum::Login);
                 return;
             }
-            // TODO: listen for auth completion and transition to SignedIn
             w.set_state(AppStateEnum::SignedIn);
         }
     });
