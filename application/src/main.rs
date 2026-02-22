@@ -133,6 +133,7 @@ fn setup_hotkeys_manager(context: &mut ApplicationContext, filter_hotkey: &str, 
 
 struct AuthUseCases {
     sign_in: Arc<SignInInteractor>,
+    sign_out: Arc<SignOutInteractor>,
     try_sign_in: Arc<TrySignInInteractor>,
 }
 
@@ -176,6 +177,12 @@ fn build_auth_use_cases(
         Arc::clone(&auth_client),
         Arc::clone(&token_cache),
         Arc::clone(&refresh_token_store),
+        Arc::clone(&notifier),
+    ));
+
+    let sign_out = Arc::new(SignOutInteractor::new(
+        Arc::clone(&token_cache),
+        Arc::clone(&refresh_token_store),
         notifier,
     ));
 
@@ -185,7 +192,7 @@ fn build_auth_use_cases(
         refresh_token_store,
     ));
 
-    AuthUseCases { sign_in, try_sign_in }
+    AuthUseCases { sign_in, sign_out, try_sign_in }
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -199,7 +206,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Auth use-cases
     let auth = build_auth_use_cases(&config, Arc::clone(&notifier));
-    let sign_out = Arc::new(SignOutInteractor::new(Arc::clone(&notifier)));
     let pass_track = Arc::new(PassTrackInteractor::new(Arc::clone(&notifier)));
     let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&notifier)));
 
@@ -228,7 +234,7 @@ fn main() -> Result<(), slint::PlatformError> {
         response_tx,
         Arc::clone(&authorized),
         auth.sign_in,
-        sign_out,
+        auth.sign_out,
         filter_track,
         pass_track,
         get_settings,
