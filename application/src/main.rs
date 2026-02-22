@@ -12,6 +12,8 @@ use domain::{
     ports::{
         ports_in::events::{AppRequest, AppResponse},
         ports_out::{
+            auth::{auth_url_builder::AuthUrlBuilder, pkce::PkceGenerator},
+            browser::BrowserLauncher,
             notification::ErrorNotification,
             repository::settings::{SettingsCache, SettingsStore},
             server::callback_server::CallbackServer,
@@ -42,6 +44,11 @@ use infrastructure::{
         tray::TrayEventListener,
     },
     adapters_out::{
+        auth::{
+            pkce::Sha256PkceGenerator,
+            spotify_auth_url::SpotifyAuthUrlBuilder,
+        },
+        browser::SystemBrowserLauncher,
         notification::ToastErrorNotification,
         repository::settings::{
             cache::LocalSettingsCache,
@@ -60,18 +67,6 @@ fn load_icon_rgba() -> (Vec<u8>, u32, u32) {
     let (width, height) = img.dimensions();
     let rgba = img.into_rgba8().into_raw();
     (rgba, width, height)
-}
-
-fn parse_redirect_uri(uri: &str) -> (String, String) {
-    let parsed = url::Url::parse(uri)
-        .unwrap_or_else(|e| panic!("invalid redirect_uri '{uri}': {e}"));
-    let addr = format!(
-        "{}:{}",
-        parsed.host_str().expect("redirect_uri must have a host"),
-        parsed.port().expect("redirect_uri must have a port"),
-    );
-    let path = parsed.path().to_string();
-    (addr, path)
 }
 
 fn setup_tray_icon(context: &mut ApplicationContext, icon_rgba: Vec<u8>, width: u32, height: u32) -> (MenuId, MenuId, MenuId) {
@@ -121,6 +116,34 @@ fn setup_hotkeys_manager(context: &mut ApplicationContext, filter_hotkey: &str, 
     (filter_id, pass_id)
 }
 
+fn build_sign_in_interactor(
+    config: &Configuration,
+    notifier: Arc<dyn ErrorNotification>,
+) -> Arc<SignInInteractor> {
+    let parsed = url::Url::parse(&config.app.spotify.auth.redirect_uri)
+        .unwrap_or_else(|e| panic!("invalid redirect_uri '{}': {e}", config.app.spotify.auth.redirect_uri));
+    let addr = format!(
+        "{}:{}",
+        parsed.host_str().expect("redirect_uri must have a host"),
+        parsed.port().expect("redirect_uri must have a port"),
+    );
+    let path = parsed.path().to_string();
+
+    let callback_server: Box<dyn CallbackServer> = Box::new(TinyHttpCallbackServer::new(addr, path));
+    let pkce_generator: Arc<dyn PkceGenerator> = Arc::new(Sha256PkceGenerator);
+    let auth_url_builder: Arc<dyn AuthUrlBuilder> = Arc::new(SpotifyAuthUrlBuilder::new(
+        config.app.spotify.auth.auth_uri.clone(),
+        config.app.spotify.auth.client_id.clone(),
+        config.app.spotify.auth.redirect_uri.clone(),
+        config.app.spotify.auth.scopes.clone(),
+    ));
+    let browser: Arc<dyn BrowserLauncher> = Arc::new(SystemBrowserLauncher);
+
+    Arc::new(SignInInteractor::new(
+        callback_server, pkce_generator, auth_url_builder, browser, notifier,
+    ))
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
@@ -130,11 +153,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let mut context = ApplicationContext::new();
     let notifier: Arc<dyn ErrorNotification> = Arc::new(ToastErrorNotification::new());
 
-    let (addr, path) = parse_redirect_uri(&config.app.spotify.auth.redirect_uri);
-    let callback_server: Box<dyn CallbackServer> = Box::new(TinyHttpCallbackServer::new(addr, path));
-
     // Use-cases
-    let sign_in = Arc::new(SignInInteractor::new(callback_server, Arc::clone(&notifier)));
+    let sign_in = build_sign_in_interactor(&config, Arc::clone(&notifier));
     let sign_out = Arc::new(SignOutInteractor::new(Arc::clone(&notifier)));
     let pass_track = Arc::new(PassTrackInteractor::new(Arc::clone(&notifier)));
     let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&notifier)));
@@ -170,7 +190,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let (id_show, id_sign_out, id_quit) = setup_tray_icon(&mut context, icon_rgba, icon_width, icon_height);
     let tray_listener = Arc::new(TrayEventListener::new(id_show, id_sign_out, id_quit));
     tray_listener.start_polling(request_tx.clone());
-    
+
     // Setup hotkeys
     let (id_filter, id_pass) = setup_hotkeys_manager(&mut context, &config.hotkeys.filter, &config.hotkeys.pass);
     let hotkey_listener = Arc::new(HotkeyEventListener::new(id_filter, id_pass));

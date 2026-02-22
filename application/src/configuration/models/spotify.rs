@@ -27,5 +27,7 @@ pub struct SpotifyAuthConfig {
     #[serde(default)]
     pub client_secret: String,
     pub auth_uri: String,
+    pub token_uri: String,
     pub redirect_uri: String,
+    pub scopes: Vec<String>,
 }
