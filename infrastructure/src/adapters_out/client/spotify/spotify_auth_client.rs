@@ -23,6 +23,13 @@ struct SpotifyTokenResponse {
     expires_in: u64,
 }
 
+#[derive(Deserialize)]
+struct SpotifyRefreshResponse {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: u64,
+}
+
 impl SpotifyAuthClient for UreqSpotifyAuthClient {
     fn exchange_code(&self, code: &str, code_verifier: &str) -> AppResult<TokenResponse> {
         let resp: SpotifyTokenResponse = ureq::post(&self.token_uri)
@@ -40,6 +47,24 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
         Ok(TokenResponse {
             access_token: resp.access_token,
             refresh_token: resp.refresh_token,
+            expires_in: resp.expires_in,
+        })
+    }
+
+    fn refresh_token(&self, refresh_token: &str) -> AppResult<TokenResponse> {
+        let resp: SpotifyRefreshResponse = ureq::post(&self.token_uri)
+            .send_form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+                ("client_id", &self.client_id),
+            ])
+            .map_err(|e| anyhow::anyhow!("Token refresh request failed: {e}"))?
+            .into_json()
+            .map_err(|e| anyhow::anyhow!("Failed to parse refresh response: {e}"))?;
+
+        Ok(TokenResponse {
+            access_token: resp.access_token,
+            refresh_token: resp.refresh_token.unwrap_or_else(|| refresh_token.to_string()),
             expires_in: resp.expires_in,
         })
     }

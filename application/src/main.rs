@@ -10,7 +10,10 @@ use std::sync::{
 
 use domain::{
     ports::{
-        ports_in::events::{AppRequest, AppResponse},
+        ports_in::{
+            events::{AppRequest, AppResponse},
+            spotify::usecases::try_sign_in::TrySignInUseCase,
+        },
         ports_out::{
             auth::{auth_url_builder::AuthUrlBuilder, pkce::PkceGenerator},
             browser::BrowserLauncher,
@@ -33,6 +36,7 @@ use domain::{
             pass_track::PassTrackInteractor,
             sign_in::SignInInteractor,
             sign_out::SignOutInteractor,
+            try_sign_in::TrySignInInteractor,
         },
     },
 };
@@ -127,10 +131,15 @@ fn setup_hotkeys_manager(context: &mut ApplicationContext, filter_hotkey: &str, 
     (filter_id, pass_id)
 }
 
-fn build_sign_in_interactor(
+struct AuthUseCases {
+    sign_in: Arc<SignInInteractor>,
+    try_sign_in: Arc<TrySignInInteractor>,
+}
+
+fn build_auth_use_cases(
     config: &Configuration,
     notifier: Arc<dyn ErrorNotification>,
-) -> Arc<SignInInteractor> {
+) -> AuthUseCases {
     let parsed = url::Url::parse(&config.app.spotify.auth.redirect_uri)
         .unwrap_or_else(|e| panic!("invalid redirect_uri '{}': {e}", config.app.spotify.auth.redirect_uri));
     let addr = format!(
@@ -159,16 +168,24 @@ fn build_sign_in_interactor(
         KeyringRefreshTokenStore::new("spotify-filter".into(), "refresh_token".into()),
     );
 
-    Arc::new(SignInInteractor::new(
+    let sign_in = Arc::new(SignInInteractor::new(
         callback_server,
         pkce_generator,
         auth_url_builder,
         browser,
+        Arc::clone(&auth_client),
+        Arc::clone(&token_cache),
+        Arc::clone(&refresh_token_store),
+        notifier,
+    ));
+
+    let try_sign_in = Arc::new(TrySignInInteractor::new(
         auth_client,
         token_cache,
         refresh_token_store,
-        notifier,
-    ))
+    ));
+
+    AuthUseCases { sign_in, try_sign_in }
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -180,8 +197,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let mut context = ApplicationContext::new();
     let notifier: Arc<dyn ErrorNotification> = Arc::new(ToastErrorNotification::new());
 
-    // Use-cases
-    let sign_in = build_sign_in_interactor(&config, Arc::clone(&notifier));
+    // Auth use-cases
+    let auth = build_auth_use_cases(&config, Arc::clone(&notifier));
     let sign_out = Arc::new(SignOutInteractor::new(Arc::clone(&notifier)));
     let pass_track = Arc::new(PassTrackInteractor::new(Arc::clone(&notifier)));
     let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&notifier)));
@@ -198,12 +215,19 @@ fn main() -> Result<(), slint::PlatformError> {
     // Shared auth state
     let authorized = Arc::new(AtomicBool::new(false));
 
+    // Try silent sign-in before starting the UI
+    let initially_authorized = matches!(auth.try_sign_in.try_sign_in(), Ok(true));
+    if initially_authorized {
+        authorized.store(true, std::sync::atomic::Ordering::Relaxed);
+        notifier.notify("Spotify Filter is ready");
+    }
+
     // Event dispatcher thread
     let dispatcher = EventDispatcher::new(
         request_rx,
         response_tx,
         Arc::clone(&authorized),
-        sign_in,
+        auth.sign_in,
         sign_out,
         filter_track,
         pass_track,
@@ -224,5 +248,5 @@ fn main() -> Result<(), slint::PlatformError> {
     hotkey_listener.start_polling(request_tx.clone(), authorized);
 
     // Run GUI event loop
-    gui::starter::run(request_tx, response_rx)
+    gui::starter::run(request_tx, response_rx, initially_authorized)
 }

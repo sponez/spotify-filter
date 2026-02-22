@@ -7,7 +7,7 @@ edition.workspace = true
 anyhow = "1"
 base64 = "0.22"
 domain = { path = "../core", package = "core" }
-keyring = "3"
+keyring = { version = "3", features = ["windows-native"] }
 open = "5"
 rand = "0.8"
 sha2 = "0.10"

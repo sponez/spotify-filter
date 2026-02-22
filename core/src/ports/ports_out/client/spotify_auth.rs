@@ -12,4 +12,9 @@ pub trait SpotifyAuthClient: Send + Sync {
         code: &str,
         code_verifier: &str,
     ) -> AppResult<TokenResponse>;
+
+    fn refresh_token(
+        &self,
+        refresh_token: &str,
+    ) -> AppResult<TokenResponse>;
 }
