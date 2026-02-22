@@ -223,6 +223,7 @@ version = "0.1.0"
 dependencies = [
  "core",
  "dotenvy",
+ "global-hotkey",
  "gui",
  "image",
  "infrastructure",
@@ -232,6 +233,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "tray-icon",
  "url",
 ]
 

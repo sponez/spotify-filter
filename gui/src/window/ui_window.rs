@@ -1,11 +1,6 @@
-use std::sync::{
-    Arc,
-    atomic::AtomicBool,
-    mpsc::{Receiver, Sender},
-};
+use std::sync::mpsc::{Receiver, Sender};
 
 use domain::ports::ports_in::events::{AppRequest, AppResponse};
-use infrastructure::adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener};
 
 use slint::ComponentHandle;
 
@@ -41,23 +36,13 @@ impl UiWindow {
         self.window.show()
     }
 
-    pub fn start_event_poll(
-        &self,
-        tray: Arc<TrayEventListener>,
-        hotkeys: Arc<HotkeyEventListener>,
-        authorized: Arc<AtomicBool>,
-        tx: Sender<AppRequest>,
-        rx: Receiver<AppResponse>,
-    ) {
+    pub fn start_event_poll(&self, rx: Receiver<AppResponse>) {
         let window_weak = self.window.as_weak();
 
         self.timer.start(
             slint::TimerMode::Repeated,
             std::time::Duration::from_millis(100),
             move || {
-                tray.poll(&tx);
-                hotkeys.poll(&tx, &authorized);
-
                 while let Ok(response) = rx.try_recv() {
                     let Some(w) = window_weak.upgrade() else { continue };
                     match response {

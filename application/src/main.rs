@@ -1,4 +1,6 @@
 mod configuration;
+mod context;
+mod utils;
 
 use std::sync::{
     Arc,
@@ -28,6 +30,7 @@ use domain::{
         },
     },
 };
+use global_hotkey::GlobalHotKeyManager;
 use gui;
 use image::GenericImageView;
 
@@ -47,6 +50,9 @@ use infrastructure::{
         server::callback_server::TinyHttpCallbackServer,
     },
 };
+use tray_icon::{Icon, TrayIconBuilder, menu::{Menu, MenuId, MenuItem}};
+
+use crate::{context::ApplicationContext, utils::hotkey_parser::parse_hotkey};
 
 fn load_icon_rgba() -> (Vec<u8>, u32, u32) {
     let bytes = include_bytes!("../resources/icon.png");
@@ -68,12 +74,60 @@ fn parse_redirect_uri(uri: &str) -> (String, String) {
     (addr, path)
 }
 
+fn setup_tray_icon(context: &mut ApplicationContext, icon_rgba: Vec<u8>, width: u32, height: u32) -> (MenuId, MenuId, MenuId) {
+    let item_show = MenuItem::new("Show", true, None);
+        let item_sign_out = MenuItem::new("Sign Out", true, None);
+        let item_quit = MenuItem::new("Quit", true, None);
+
+        let id_show = item_show.id().clone();
+        let id_sign_out = item_sign_out.id().clone();
+        let id_quit = item_quit.id().clone();
+
+        let menu = Menu::new();
+        menu.append(&item_show).unwrap();
+        menu.append(&item_sign_out).unwrap();
+        menu.append(&item_quit).unwrap();
+
+        let icon = Icon::from_rgba(icon_rgba, width, height).expect("valid icon RGBA data");
+
+        let tray_icon = TrayIconBuilder::new()
+            .with_menu(Box::new(menu))
+            .with_tooltip("Spotify Filter")
+            .with_icon(icon)
+            .with_menu_on_left_click(false)
+            .build()
+            .expect("failed to build tray icon");
+
+        context.tray_icon = Some(tray_icon);
+        (id_show, id_sign_out, id_quit)
+}
+
+fn setup_hotkeys_manager(context: &mut ApplicationContext, filter_hotkey: &str, pass_hotkey: &str) -> (u32, u32) {
+    let hotkey_filter = parse_hotkey(filter_hotkey);
+    let hotkey_pass = parse_hotkey(pass_hotkey);
+
+    let filter_id = hotkey_filter.id();
+    let pass_id = hotkey_pass.id();
+
+    let manager = GlobalHotKeyManager::new().expect("failed to create hotkey manager");
+    manager
+        .register(hotkey_filter)
+        .expect("failed to register filter hotkey");
+    manager
+        .register(hotkey_pass)
+        .expect("failed to register pass hotkey");
+
+    context.hotkeys_manager = Some(manager);
+    (filter_id, pass_id)
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
         .init();
 
     let config = Configuration::load();
+    let mut context = ApplicationContext::new();
     let notifier: Arc<dyn ErrorNotification> = Arc::new(ToastErrorNotification::new());
 
     let (addr, path) = parse_redirect_uri(&config.app.spotify.auth.redirect_uri);
@@ -111,11 +165,17 @@ fn main() -> Result<(), slint::PlatformError> {
     );
     std::thread::spawn(move || dispatcher.run());
 
-    // Tray and hotkeys (must live on GUI thread for Windows message pump)
-    let hotkey_listener = HotkeyEventListener::new(&config.hotkeys.filter, &config.hotkeys.pass);
-    let (icon_rgba, width, height) = load_icon_rgba();
-    let tray_listener = TrayEventListener::new(icon_rgba, width, height);
+    // Load tray icon
+    let (icon_rgba, icon_width, icon_height) = load_icon_rgba();
+    let (id_show, id_sign_out, id_quit) = setup_tray_icon(&mut context, icon_rgba, icon_width, icon_height);
+    let tray_listener = Arc::new(TrayEventListener::new(id_show, id_sign_out, id_quit));
+    tray_listener.start_polling(request_tx.clone());
+    
+    // Setup hotkeys
+    let (id_filter, id_pass) = setup_hotkeys_manager(&mut context, &config.hotkeys.filter, &config.hotkeys.pass);
+    let hotkey_listener = Arc::new(HotkeyEventListener::new(id_filter, id_pass));
+    hotkey_listener.start_polling(request_tx.clone(), authorized);
 
     // Run GUI event loop
-    gui::starter::run(tray_listener, hotkey_listener, authorized, request_tx, response_rx)
+    gui::starter::run(request_tx, response_rx)
 }
