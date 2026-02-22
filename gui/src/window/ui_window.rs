@@ -1,9 +1,10 @@
-use std::sync::Arc;
-
-use domain::ports::ports_in::{
-    settings::settings_facade::SettingsFacade,
-    spotify::usecases::{sign_in::SignInUseCase, sign_out::SignOutUseCase},
+use std::sync::{
+    Arc,
+    atomic::AtomicBool,
+    mpsc::{Receiver, Sender},
 };
+
+use domain::ports::ports_in::events::{AppRequest, AppResponse};
 use infrastructure::adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener};
 
 use slint::ComponentHandle;
@@ -13,10 +14,9 @@ use crate::window::{
     callbacks::{
         auth::{setup_close_handler, setup_sign_in_callback, setup_sign_out_callback},
         settings::{setup_open_settings_callback, setup_save_settings_callback},
-    }
+    },
+    mapper::settings_mapper::apply_settings_view_to_window,
 };
-
-use domain::ports::ports_in::spotify::spotify_facade::SpotifyFacade;
 
 pub struct UiWindow {
     pub(super) window: AppWindow,
@@ -24,19 +24,15 @@ pub struct UiWindow {
 }
 
 impl UiWindow {
-    pub fn create_and_set_up_callbacks(
-        sign_in: Arc<dyn SignInUseCase>,
-        sign_out: Arc<dyn SignOutUseCase>,
-        settings_facade: Arc<SettingsFacade>,
-    ) -> Self {
+    pub fn create_and_set_up_callbacks(tx: Sender<AppRequest>) -> Self {
         let window = AppWindow::new().expect("Failed to create main window");
         let ui_window = Self { window, timer: slint::Timer::default() };
 
         setup_close_handler(&ui_window.window);
-        setup_sign_in_callback(&ui_window.window, sign_in);
-        setup_sign_out_callback(&ui_window.window, sign_out);
-        setup_open_settings_callback(&ui_window.window, Arc::clone(&settings_facade.get));
-        setup_save_settings_callback(&ui_window.window, Arc::clone(&settings_facade.save));
+        setup_sign_in_callback(&ui_window.window, tx.clone());
+        setup_sign_out_callback(&ui_window.window, tx.clone());
+        setup_open_settings_callback(&ui_window.window, tx.clone());
+        setup_save_settings_callback(&ui_window.window, tx);
 
         ui_window
     }
@@ -49,7 +45,9 @@ impl UiWindow {
         &self,
         tray: Arc<TrayEventListener>,
         hotkeys: Arc<HotkeyEventListener>,
-        spotify_facade: Arc<SpotifyFacade>,
+        authorized: Arc<AtomicBool>,
+        tx: Sender<AppRequest>,
+        rx: Receiver<AppResponse>,
     ) {
         let window_weak = self.window.as_weak();
 
@@ -57,38 +55,46 @@ impl UiWindow {
             slint::TimerMode::Repeated,
             std::time::Duration::from_millis(100),
             move || {
-                let Some(w) = window_weak.upgrade() else { return };
-                let w2 = window_weak.clone();
-                let sign_out_clone = Arc::clone(&spotify_facade.sign_out);
-                let pass_track_clone = Arc::clone(&spotify_facade.pass_track);
-                let filter_track_clone = Arc::clone(&spotify_facade.filter_track);
+                tray.poll(&tx);
+                hotkeys.poll(&tx, &authorized);
 
-                tray.poll(
-                    move || {
-                        w.window().show().ok();
-                    },
-                    move || {
-                        if sign_out_clone.sign_out().is_err() {
-                            return;
+                while let Ok(response) = rx.try_recv() {
+                    let Some(w) = window_weak.upgrade() else { continue };
+                    match response {
+                        AppResponse::SignInCompleted(result) => {
+                            if result.is_ok() {
+                                w.set_state(AppStateEnum::SignedIn);
+                            } else {
+                                w.set_state(AppStateEnum::Login);
+                            }
                         }
-                        if let Some(win) = w2.upgrade() {
-                            win.set_state(AppStateEnum::Login);
-                            win.window().show().ok();
+                        AppResponse::SignOutCompleted(result) => {
+                            if result.is_ok() {
+                                w.set_state(AppStateEnum::Login);
+                                w.window().show().ok();
+                            }
                         }
-                    },
-                    || {
-                        slint::quit_event_loop().ok();
-                    },
-                );
-
-                hotkeys.poll(
-                    move || {
-                        let _ = filter_track_clone.filter_current_track();
-                    },
-                    move || {
-                        let _ = pass_track_clone.pass_current_track();
-                    },
-                );
+                        AppResponse::FilterTrackCompleted(_) => {}
+                        AppResponse::PassTrackCompleted(_) => {}
+                        AppResponse::SettingsLoaded(result) => {
+                            if let Ok(view) = result {
+                                apply_settings_view_to_window(&w, view);
+                                w.set_state(AppStateEnum::Settings);
+                            }
+                        }
+                        AppResponse::SettingsSaved(result) => {
+                            if result.is_ok() {
+                                w.set_state(AppStateEnum::SignedIn);
+                            }
+                        }
+                        AppResponse::ShowWindow => {
+                            w.window().show().ok();
+                        }
+                        AppResponse::Quit => {
+                            slint::quit_event_loop().ok();
+                        }
+                    }
+                }
             },
         );
     }

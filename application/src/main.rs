@@ -1,13 +1,14 @@
 mod configuration;
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::AtomicBool,
+    mpsc,
+};
 
 use domain::{
     ports::{
-        ports_in::{
-            settings::settings_facade::SettingsFacade,
-            spotify::spotify_facade::SpotifyFacade,
-        },
+        ports_in::events::{AppRequest, AppResponse},
         ports_out::{
             notification::ErrorNotification,
             repository::settings::{SettingsCache, SettingsStore},
@@ -32,7 +33,11 @@ use image::GenericImageView;
 
 use configuration::configuration::Configuration;
 use infrastructure::{
-    adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener},
+    adapters_in::{
+        event_dispatcher::EventDispatcher,
+        hotkeys::HotkeyEventListener,
+        tray::TrayEventListener,
+    },
     adapters_out::{
         notification::ToastErrorNotification,
         repository::settings::{
@@ -63,27 +68,6 @@ fn parse_redirect_uri(uri: &str) -> (String, String) {
     (addr, path)
 }
 
-fn create_spotify_facade(
-    callback_server: Box<dyn CallbackServer>,
-    notifier: &Arc<dyn ErrorNotification>,
-) -> SpotifyFacade {
-    SpotifyFacade::new(
-        Arc::new(SignInInteractor::new(callback_server, Arc::clone(notifier))),
-        Arc::new(SignOutInteractor::new(Arc::clone(notifier))),
-        Arc::new(PassTrackInteractor::new(Arc::clone(notifier))),
-        Arc::new(FilterTrackInteractor::new(Arc::clone(notifier))),
-    )
-}
-
-fn create_settings_facade(notifier: &Arc<dyn ErrorNotification>) -> SettingsFacade {
-    let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
-    let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
-    SettingsFacade::new(
-        Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(notifier))),
-        Arc::new(SaveSettingsInteractor::new(cache, file, Arc::clone(notifier))),
-    )
-}
-
 fn main() -> Result<(), slint::PlatformError> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
@@ -95,15 +79,43 @@ fn main() -> Result<(), slint::PlatformError> {
     let (addr, path) = parse_redirect_uri(&config.app.spotify.auth.redirect_uri);
     let callback_server: Box<dyn CallbackServer> = Box::new(TinyHttpCallbackServer::new(addr, path));
 
-    let hotkey_listener = HotkeyEventListener::new(&config.hotkeys.filter, &config.hotkeys.pass);
+    // Use-cases
+    let sign_in = Arc::new(SignInInteractor::new(callback_server, Arc::clone(&notifier)));
+    let sign_out = Arc::new(SignOutInteractor::new(Arc::clone(&notifier)));
+    let pass_track = Arc::new(PassTrackInteractor::new(Arc::clone(&notifier)));
+    let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&notifier)));
 
+    let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
+    let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
+    let get_settings = Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(&notifier)));
+    let save_settings = Arc::new(SaveSettingsInteractor::new(cache, file, Arc::clone(&notifier)));
+
+    // Channels
+    let (request_tx, request_rx) = mpsc::channel::<AppRequest>();
+    let (response_tx, response_rx) = mpsc::channel::<AppResponse>();
+
+    // Shared auth state
+    let authorized = Arc::new(AtomicBool::new(false));
+
+    // Event dispatcher thread
+    let dispatcher = EventDispatcher::new(
+        request_rx,
+        response_tx,
+        Arc::clone(&authorized),
+        sign_in,
+        sign_out,
+        filter_track,
+        pass_track,
+        get_settings,
+        save_settings,
+    );
+    std::thread::spawn(move || dispatcher.run());
+
+    // Tray and hotkeys (must live on GUI thread for Windows message pump)
+    let hotkey_listener = HotkeyEventListener::new(&config.hotkeys.filter, &config.hotkeys.pass);
     let (icon_rgba, width, height) = load_icon_rgba();
     let tray_listener = TrayEventListener::new(icon_rgba, width, height);
 
-    gui::starter::run(
-        tray_listener,
-        hotkey_listener,
-        create_spotify_facade(callback_server, &notifier),
-        create_settings_facade(&notifier),
-    )
+    // Run GUI event loop
+    gui::starter::run(tray_listener, hotkey_listener, authorized, request_tx, response_rx)
 }

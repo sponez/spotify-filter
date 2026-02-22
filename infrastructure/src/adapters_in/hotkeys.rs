@@ -1,3 +1,10 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc::Sender,
+};
+
+use domain::ports::ports_in::events::AppRequest;
 use global_hotkey::{
     GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
     hotkey::{Code, HotKey, Modifiers},
@@ -128,17 +135,21 @@ impl HotkeyEventListener {
         }
     }
 
-    /// Drain all pending hotkey events and call the appropriate callback.
+    /// Drain all pending hotkey events, forwarding them to the request channel.
+    /// Only sends events when `authorized` is true.
     /// Call this once per timer tick from the GUI event loop.
-    pub fn poll(&self, on_filter: impl Fn(), on_pass: impl Fn()) {
+    pub fn poll(&self, tx: &Sender<AppRequest>, authorized: &Arc<AtomicBool>) {
         while let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
             if event.state != HotKeyState::Pressed {
                 continue;
             }
+            if !authorized.load(Ordering::Relaxed) {
+                continue;
+            }
             if event.id == self.filter_id {
-                on_filter();
+                let _ = tx.send(AppRequest::FilterTrack);
             } else if event.id == self.pass_id {
-                on_pass();
+                let _ = tx.send(AppRequest::PassTrack);
             }
         }
     }

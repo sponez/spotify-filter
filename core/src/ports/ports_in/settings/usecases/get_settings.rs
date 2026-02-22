@@ -3,6 +3,6 @@ use crate::{
     ports::ports_in::settings::models::SettingsView
 };
 
-pub trait GetSettingsUseCase {
+pub trait GetSettingsUseCase: Send + Sync {
     fn get_settings(&self) -> AppResult<SettingsView>;
 }

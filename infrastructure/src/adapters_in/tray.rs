@@ -1,3 +1,6 @@
+use std::sync::mpsc::Sender;
+
+use domain::ports::ports_in::events::AppRequest;
 use tray_icon::{
     Icon, TrayIcon, TrayIconBuilder, TrayIconEvent,
     menu::{Menu, MenuEvent, MenuId, MenuItem},
@@ -48,30 +51,23 @@ impl TrayEventListener {
         }
     }
 
-    /// Drain all pending tray and menu events and call the appropriate callback.
+    /// Drain all pending tray and menu events, forwarding them to the request channel.
     /// Call this once per timer tick from the GUI event loop.
-    pub fn poll(
-        &self,
-        on_show: impl Fn(),
-        on_sign_out: impl Fn(),
-        on_quit: impl Fn(),
-    ) {
-        // Left-click on the tray icon → show window
+    pub fn poll(&self, tx: &Sender<AppRequest>) {
         while let Ok(event) = TrayIconEvent::receiver().try_recv() {
             if matches!(event, TrayIconEvent::Click { .. }) {
-                on_show();
+                let _ = tx.send(AppRequest::ShowWindow);
             }
         }
 
-        // Context menu items
         while let Ok(event) = MenuEvent::receiver().try_recv() {
             let id = &event.id;
             if *id == self.id_show {
-                on_show();
+                let _ = tx.send(AppRequest::ShowWindow);
             } else if *id == self.id_sign_out {
-                on_sign_out();
+                let _ = tx.send(AppRequest::SignOut);
             } else if *id == self.id_quit {
-                on_quit();
+                let _ = tx.send(AppRequest::Quit);
             }
         }
     }
