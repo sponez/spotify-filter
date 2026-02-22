@@ -17,7 +17,7 @@ use domain::{
         ports_out::{
             auth::{auth_url_builder::AuthUrlBuilder, pkce::PkceGenerator},
             browser::BrowserLauncher,
-            client::spotify_auth::SpotifyAuthClient,
+            client::{spotify_api::SpotifyApiClient, spotify_auth::SpotifyAuthClient},
             notification::ErrorNotification,
             repository::{
                 settings::{SettingsCache, SettingsStore},
@@ -57,7 +57,10 @@ use infrastructure::{
             spotify_auth_url::SpotifyAuthUrlBuilder,
         },
         browser::SystemBrowserLauncher,
-        client::spotify::spotify_auth_client::UreqSpotifyAuthClient,
+        client::spotify::{
+            spotify_api_client::UreqSpotifyApiClient,
+            spotify_auth_client::UreqSpotifyAuthClient,
+        },
         notification::ToastErrorNotification,
         repository::{
             settings::{
@@ -135,6 +138,7 @@ struct AuthUseCases {
     sign_in: Arc<SignInInteractor>,
     sign_out: Arc<SignOutInteractor>,
     try_sign_in: Arc<TrySignInInteractor>,
+    token_cache: Arc<dyn TokenCache>,
 }
 
 fn build_auth_use_cases(
@@ -188,11 +192,11 @@ fn build_auth_use_cases(
 
     let try_sign_in = Arc::new(TrySignInInteractor::new(
         auth_client,
-        token_cache,
+        Arc::clone(&token_cache),
         refresh_token_store,
     ));
 
-    AuthUseCases { sign_in, sign_out, try_sign_in }
+    AuthUseCases { sign_in, sign_out, try_sign_in, token_cache }
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -206,8 +210,15 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Auth use-cases
     let auth = build_auth_use_cases(&config, Arc::clone(&notifier));
+
+    // Spotify API client
+    let api_client: Arc<dyn SpotifyApiClient> = Arc::new(UreqSpotifyApiClient::new(
+        config.app.spotify.api.url.clone(),
+        Arc::clone(&auth.token_cache),
+    ));
+
     let pass_track = Arc::new(PassTrackInteractor::new(Arc::clone(&notifier)));
-    let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&notifier)));
+    let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));
 
     let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
     let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
