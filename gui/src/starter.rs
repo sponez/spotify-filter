@@ -1,32 +1,17 @@
-use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender};
 
-use domain::ports::ports_in::{
-    settings::settings_facade::SettingsFacade,
-    spotify::spotify_facade::SpotifyFacade,
-};
+use domain::ports::ports_in::events::{AppRequest, AppResponse};
 use slint::run_event_loop_until_quit;
-
-use infrastructure::adapters_in::{hotkeys::HotkeyEventListener, tray::TrayEventListener};
 
 use crate::window::UiWindow;
 
 pub fn run(
-    tray: TrayEventListener,
-    hotkeys: HotkeyEventListener,
-    spotify_facade: SpotifyFacade,
-    settings_facade: SettingsFacade,
+    tx: Sender<AppRequest>,
+    rx: Receiver<AppResponse>,
 ) -> Result<(), slint::PlatformError> {
-    let settings_facade = Arc::new(settings_facade);
-    let window = UiWindow::create_and_set_up_callbacks(
-        Arc::clone(&spotify_facade.sign_in),
-        Arc::clone(&spotify_facade.sign_out),
-        settings_facade,
-    );
-    let tray = Arc::new(tray);
-    let hotkeys = Arc::new(hotkeys);
-    let spotify_facade = Arc::new(spotify_facade);
+    let window = UiWindow::create_and_set_up_callbacks(tx.clone());
 
-    window.start_event_poll(tray, hotkeys, spotify_facade);
+    window.start_event_poll(rx);
     window.show()?;
     run_event_loop_until_quit()
 }

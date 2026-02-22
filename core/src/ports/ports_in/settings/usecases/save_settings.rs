@@ -3,6 +3,6 @@ use crate::{
     ports::ports_in::settings::models::SaveSettingsCommand
 };
 
-pub trait SaveSettingsUseCase {
+pub trait SaveSettingsUseCase: Send + Sync {
     fn save_settings(&self, command: SaveSettingsCommand) -> AppResult<()>;
 }
