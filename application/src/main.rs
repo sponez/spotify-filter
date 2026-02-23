@@ -226,7 +226,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
     let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
-    let get_settings = Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(&notifier)));
+    let get_settings = Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(&api_client), Arc::clone(&notifier)));
     let save_settings = Arc::new(SaveSettingsInteractor::new(cache, file, Arc::clone(&notifier)));
 
     // Channels

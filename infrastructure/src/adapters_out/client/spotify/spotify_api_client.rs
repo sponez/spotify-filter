@@ -152,12 +152,12 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
 
     fn add_to_library(&self, uris: &[&str]) -> AppResult<()> {
         let token = self.token()?;
-        let url = self.url("library")?;
+        let ids = uris.join(",");
+        let url = format!("{}?uris={ids}", self.url("library")?);
 
         ureq::put(&url)
             .set("Authorization", &format!("Bearer {token}"))
-            .set("Content-Type", "application/json")
-            .send_json(ureq::json!({ "uris": uris }))
+            .call()
             .map_err(|e| anyhow::anyhow!("Failed to add to library: {e}"))?;
 
         Ok(())

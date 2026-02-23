@@ -3,6 +3,13 @@
 pub struct SettingsView {
     pub filter_action: FilterActionView,
     pub filter_target: FilterTargetView,
+    pub playlists: Vec<PlaylistItemView>,
+}
+
+#[derive(Clone)]
+pub struct PlaylistItemView {
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(Clone, PartialEq)]
