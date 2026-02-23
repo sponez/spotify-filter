@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use slint::ComponentHandle;
 use slint::ModelRc;
 use slint::VecModel;
 
@@ -84,9 +85,7 @@ pub fn apply_playlists_to_window(w: &AppWindow, mut playlists: Vec<PlaylistItemV
             _ => -1,
         }
     });
-
-    // Set index BEFORE model to prevent Slint's auto-reset to 0
-    w.set_filter_playlist_index(selected_index);
+    
 
     let names: Vec<slint::SharedString> = playlists.iter()
         .map(|p| slint::SharedString::from(&p.name))
@@ -95,4 +94,22 @@ pub fn apply_playlists_to_window(w: &AppWindow, mut playlists: Vec<PlaylistItemV
 
     // Store playlists for later save lookup
     PLAYLISTS.with(|p| *p.borrow_mut() = playlists);
+
+    // CAS loop: keep retrying until Slint accepts the index
+    w.set_filter_playlist_index(selected_index);
+    let weak = w.as_weak();
+    let timer = slint::Timer::default();
+    timer.start(slint::TimerMode::Repeated, std::time::Duration::from_millis(10), move || {
+        let Some(w) = weak.upgrade() else { return };
+        if w.get_filter_playlist_index() == selected_index {
+            CAS_TIMER.with(|t| t.borrow_mut().take());
+            return;
+        }
+        w.set_filter_playlist_index(selected_index);
+    });
+    CAS_TIMER.with(|t| *t.borrow_mut() = Some(timer));
+}
+
+thread_local! {
+    static CAS_TIMER: RefCell<Option<slint::Timer>> = RefCell::new(None);
 }

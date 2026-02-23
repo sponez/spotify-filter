@@ -69,12 +69,12 @@ impl UiWindow {
                         AppResponse::SettingsLoaded(result) => {
                             if let Ok(view) = result {
                                 apply_settings_view_to_window(&w, view);
+                                w.set_state(AppStateEnum::Settings);
                                 let _ = tx.send(AppRequest::GetPlaylists);
                             }
                         }
                         AppResponse::PlaylistsLoaded(playlists) => {
                             apply_playlists_to_window(&w, playlists);
-                            w.set_state(AppStateEnum::Settings);
                         }
                         AppResponse::SettingsSaved(result) => {
                             if result.is_ok() {
