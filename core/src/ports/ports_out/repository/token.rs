@@ -15,7 +15,8 @@ pub enum TokenStoreError {
 /// In-memory cache for the current access token.
 pub trait TokenCache: Send + Sync {
     fn load(&self) -> Option<String>;
-    fn store(&self, access_token: &str);
+    fn store(&self, access_token: &str, expires_in_secs: u64);
+    fn is_expiring_soon(&self) -> bool;
     fn clear(&self);
 }
 

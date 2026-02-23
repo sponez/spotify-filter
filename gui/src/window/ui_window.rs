@@ -40,6 +40,11 @@ impl UiWindow {
         self.window.set_state(state);
     }
 
+    pub fn set_hotkeys(&self, filter_hotkey: &str, pass_hotkey: &str) {
+        self.window.set_filter_hotkey(slint::SharedString::from(filter_hotkey));
+        self.window.set_pass_hotkey(slint::SharedString::from(pass_hotkey));
+    }
+
     pub fn start_event_poll(&self, tx: Sender<AppRequest>, rx: Receiver<AppResponse>) {
         let window_weak = self.window.as_weak();
 

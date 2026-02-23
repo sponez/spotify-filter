@@ -265,6 +265,8 @@ fn main() -> Result<(), slint::PlatformError> {
         get_settings,
         get_playlists,
         save_settings,
+        Arc::clone(&auth.try_sign_in) as Arc<dyn TrySignInUseCase>,
+        Arc::clone(&auth.token_cache),
     );
     std::thread::spawn(move || dispatcher.run());
 
@@ -280,5 +282,5 @@ fn main() -> Result<(), slint::PlatformError> {
     hotkey_listener.start_polling(request_tx.clone(), authorized);
 
     // Run GUI event loop
-    gui::starter::run(request_tx, response_rx, initially_authorized)
+    gui::starter::run(request_tx, response_rx, initially_authorized, &config.hotkeys.filter, &config.hotkeys.pass)
 }
