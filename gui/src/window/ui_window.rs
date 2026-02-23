@@ -98,9 +98,16 @@ impl UiWindow {
                                 let _ = tx.send(AppRequest::GetPlaylists);
                             }
                         }
-                        AppResponse::PlaylistsLoaded(playlists) => {
-                            info!(count = playlists.len(), "Playlists loaded into GUI");
-                            apply_playlists_to_window(&w, playlists);
+                        AppResponse::PlaylistsLoaded(result) => {
+                            match result {
+                                Ok(playlists) => {
+                                    info!(count = playlists.len(), "Playlists loaded into GUI");
+                                    apply_playlists_to_window(&w, playlists);
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "Playlists load failed");
+                                }
+                            }
                         }
                         AppResponse::SettingsSaved(result) => {
                             if result.is_ok() {

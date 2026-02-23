@@ -95,7 +95,11 @@ impl PassTrackUseCase for PassTrackInteractor {
         info!("Pass track requested");
         match self.api_client.get_currently_playing() {
             Ok(Some(track)) => {
-                self.pass_track(track)?;
+                self.pass_track(track).map_err(|e| {
+                    error!(error = %e, "Failed to pass current track");
+                    self.notifier.notify(&e.to_string());
+                    e
+                })?;
             }
             Ok(None) => {
                 debug!("Nothing is currently playing");

@@ -140,7 +140,11 @@ impl EventDispatcher {
                 }
                 AppRequest::GetPlaylists => {
                     self.refresh_token_if_needed();
-                    AppResponse::PlaylistsLoaded(self.get_playlists.get_playlists())
+                    let result = self.get_playlists.get_playlists();
+                    if let Err(ref e) = result {
+                        error!(error = %e, "Get playlists command failed");
+                    }
+                    AppResponse::PlaylistsLoaded(result)
                 }
                 AppRequest::SaveSettings(command) => {
                     let result = self.save_settings.save_settings(command);

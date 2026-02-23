@@ -61,7 +61,11 @@ impl FilterTrackUseCase for FilterTrackInteractor {
         info!("Filter current track requested");
         match self.api_client.get_currently_playing() {
             Ok(Some(track)) => {
-                self.filter_track(track)?;
+                self.filter_track(track).map_err(|e| {
+                    error!(error = %e, "Failed to filter current track");
+                    self.notifier.notify(&e.to_string());
+                    e
+                })?;
             }
             Ok(None) => {
                 debug!("Nothing is currently playing");
