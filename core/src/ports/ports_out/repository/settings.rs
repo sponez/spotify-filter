@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::ports::ports_in::settings::models::{FilterActionView, FilterTargetView};
+use crate::ports::ports_in::settings::models::{PassActionView, PassTargetView};
 
 #[derive(Debug, Error)]
 pub enum SettingsStoreError {
@@ -17,12 +17,12 @@ pub enum SettingsStoreError {
 /// Read settings from the cache layer (fast, in-memory).
 /// Returns `None` if the cache is cold (not yet populated).
 pub trait SettingsCache: Send + Sync {
-    fn load(&self) -> Option<(FilterActionView, FilterTargetView)>;
-    fn store(&self, action: &FilterActionView, target: &FilterTargetView);
+    fn load(&self) -> Option<(PassActionView, PassTargetView)>;
+    fn store(&self, action: &PassActionView, target: &PassTargetView);
 }
 
 /// Persist / restore settings from durable storage (file, registry, …).
 pub trait SettingsStore: Send + Sync {
-    fn load(&self) -> Result<(FilterActionView, FilterTargetView), SettingsStoreError>;
-    fn save(&self, action: &FilterActionView, target: &FilterTargetView) -> Result<(), SettingsStoreError>;
+    fn load(&self) -> Result<(PassActionView, PassTargetView), SettingsStoreError>;
+    fn save(&self, action: &PassActionView, target: &PassTargetView) -> Result<(), SettingsStoreError>;
 }

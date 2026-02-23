@@ -1,46 +1,115 @@
-use domain::ports::ports_in::settings::models::{FilterActionView, FilterTargetView, SettingsView};
+use std::cell::RefCell;
+
+use slint::ComponentHandle;
+use slint::ModelRc;
+use slint::VecModel;
+
+use domain::ports::ports_in::settings::models::{PassActionView, PassTargetView, PlaylistItemView, SettingsView};
 
 use crate::{AppWindow, FilterActionEnum};
 
-pub fn action_view_to_slint(action: &FilterActionView) -> FilterActionEnum {
+thread_local! {
+    static PLAYLISTS: RefCell<Vec<PlaylistItemView>> = RefCell::new(Vec::new());
+}
+
+pub fn action_view_to_slint(action: &PassActionView) -> FilterActionEnum {
     match action {
-        FilterActionView::None => FilterActionEnum::None,
-        FilterActionView::AddToPlaylist => FilterActionEnum::AddToPlaylist,
-        FilterActionView::MoveToPlaylist => FilterActionEnum::MoveToPlaylist,
+        PassActionView::None => FilterActionEnum::None,
+        PassActionView::AddToPlaylist => FilterActionEnum::AddToPlaylist,
+        PassActionView::MoveToPlaylist => FilterActionEnum::MoveToPlaylist,
     }
 }
 
-pub fn slint_to_action_view(e: FilterActionEnum) -> FilterActionView {
+pub fn slint_to_action_view(e: FilterActionEnum) -> PassActionView {
     match e {
-        FilterActionEnum::None => FilterActionView::None,
-        FilterActionEnum::AddToPlaylist => FilterActionView::AddToPlaylist,
-        FilterActionEnum::MoveToPlaylist => FilterActionView::MoveToPlaylist,
+        FilterActionEnum::None => PassActionView::None,
+        FilterActionEnum::AddToPlaylist => PassActionView::AddToPlaylist,
+        FilterActionEnum::MoveToPlaylist => PassActionView::MoveToPlaylist,
     }
 }
 
-pub fn target_view_to_type(target: &FilterTargetView) -> i32 {
+pub fn target_view_to_type(target: &PassTargetView) -> i32 {
     match target {
-        FilterTargetView::Playlist(_) => 1,
-        FilterTargetView::LikedSongs => 0,
+        PassTargetView::Playlist(_) => 1,
+        PassTargetView::LikedSongs => 0,
     }
 }
 
-pub fn target_view_to_playlist_index(target: &FilterTargetView) -> i32 {
-    match target {
-        FilterTargetView::Playlist(_) => 0,
-        FilterTargetView::LikedSongs => -1,
-    }
-}
-
-pub fn slint_to_target_view(target_type: i32, _playlist_index: i32) -> FilterTargetView {
+pub fn slint_to_target_view(target_type: i32, playlist_index: i32) -> PassTargetView {
     match target_type {
-        1 => FilterTargetView::Playlist(String::new()),
-        _ => FilterTargetView::LikedSongs,
+        1 => {
+            let id = playlist_id_by_index(playlist_index).unwrap_or_default();
+            PassTargetView::Playlist(id)
+        }
+        _ => PassTargetView::LikedSongs,
     }
+}
+
+fn playlist_id_by_index(index: i32) -> Option<String> {
+    if index < 0 {
+        return None;
+    }
+    PLAYLISTS.with(|p| {
+        p.borrow().get(index as usize).map(|item| item.id.clone())
+    })
 }
 
 pub fn apply_settings_view_to_window(w: &AppWindow, view: SettingsView) {
-    w.set_filter_action(action_view_to_slint(&view.filter_action));
-    w.set_filter_target_type(target_view_to_type(&view.filter_target));
-    w.set_filter_playlist_index(target_view_to_playlist_index(&view.filter_target));
+    w.set_filter_action(action_view_to_slint(&view.pass_action));
+    w.set_filter_target_type(target_view_to_type(&view.pass_target));
+
+    // Store the target for playlist index resolution after playlists arrive
+    SELECTED_TARGET.with(|t| *t.borrow_mut() = Some(view.pass_target));
+}
+
+thread_local! {
+    static SELECTED_TARGET: RefCell<Option<PassTargetView>> = RefCell::new(None);
+}
+
+pub fn apply_playlists_to_window(w: &AppWindow, mut playlists: Vec<PlaylistItemView>) {
+    // Resolve selected index, inserting "playlist deleted" placeholder if needed
+    let selected_index = SELECTED_TARGET.with(|t| {
+        match t.borrow().as_ref() {
+            Some(PassTargetView::Playlist(id)) if !id.is_empty() => {
+                match playlists.iter().position(|p| p.id == *id) {
+                    Some(i) => i as i32,
+                    None => {
+                        playlists.insert(0, PlaylistItemView {
+                            id: id.clone(),
+                            name: "playlist deleted".to_string(),
+                        });
+                        0
+                    }
+                }
+            }
+            _ => -1,
+        }
+    });
+    
+
+    let names: Vec<slint::SharedString> = playlists.iter()
+        .map(|p| slint::SharedString::from(&p.name))
+        .collect();
+    w.set_filter_playlist_model(ModelRc::new(VecModel::from(names)));
+
+    // Store playlists for later save lookup
+    PLAYLISTS.with(|p| *p.borrow_mut() = playlists);
+
+    // CAS loop: keep retrying until Slint accepts the index
+    w.set_filter_playlist_index(selected_index);
+    let weak = w.as_weak();
+    let timer = slint::Timer::default();
+    timer.start(slint::TimerMode::Repeated, std::time::Duration::from_millis(10), move || {
+        let Some(w) = weak.upgrade() else { return };
+        if w.get_filter_playlist_index() == selected_index {
+            CAS_TIMER.with(|t| t.borrow_mut().take());
+            return;
+        }
+        w.set_filter_playlist_index(selected_index);
+    });
+    CAS_TIMER.with(|t| *t.borrow_mut() = Some(timer));
+}
+
+thread_local! {
+    static CAS_TIMER: RefCell<Option<slint::Timer>> = RefCell::new(None);
 }

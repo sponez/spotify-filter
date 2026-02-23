@@ -45,6 +45,6 @@ impl GetSettingsUseCase for GetSettingsInteractor {
             }
         };
 
-        Ok(SettingsView { filter_action, filter_target })
+        Ok(SettingsView { pass_action: filter_action, pass_target: filter_target })
     }
 }

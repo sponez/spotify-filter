@@ -10,7 +10,7 @@ use crate::window::{
         auth::{setup_close_handler, setup_sign_in_callback, setup_sign_out_callback},
         settings::{setup_open_settings_callback, setup_save_settings_callback},
     },
-    mapper::settings_mapper::apply_settings_view_to_window,
+    mapper::settings_mapper::{apply_playlists_to_window, apply_settings_view_to_window},
 };
 
 pub struct UiWindow {
@@ -40,7 +40,7 @@ impl UiWindow {
         self.window.set_state(state);
     }
 
-    pub fn start_event_poll(&self, rx: Receiver<AppResponse>) {
+    pub fn start_event_poll(&self, tx: Sender<AppRequest>, rx: Receiver<AppResponse>) {
         let window_weak = self.window.as_weak();
 
         self.timer.start(
@@ -70,7 +70,11 @@ impl UiWindow {
                             if let Ok(view) = result {
                                 apply_settings_view_to_window(&w, view);
                                 w.set_state(AppStateEnum::Settings);
+                                let _ = tx.send(AppRequest::GetPlaylists);
                             }
+                        }
+                        AppResponse::PlaylistsLoaded(playlists) => {
+                            apply_playlists_to_window(&w, playlists);
                         }
                         AppResponse::SettingsSaved(result) => {
                             if result.is_ok() {

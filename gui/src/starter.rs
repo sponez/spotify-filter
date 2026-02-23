@@ -12,7 +12,7 @@ pub fn run(
 ) -> Result<(), slint::PlatformError> {
     let window = UiWindow::create_and_set_up_callbacks(tx.clone());
 
-    window.start_event_poll(rx);
+    window.start_event_poll(tx, rx);
 
     if initially_authorized {
         window.set_state(AppStateEnum::SignedIn);

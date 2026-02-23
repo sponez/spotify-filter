@@ -7,6 +7,7 @@ use std::sync::{
 use domain::ports::ports_in::{
     events::{AppRequest, AppResponse},
     settings::usecases::{
+        get_playlists::GetPlaylistsUseCase,
         get_settings::GetSettingsUseCase,
         save_settings::SaveSettingsUseCase,
     },
@@ -27,6 +28,7 @@ pub struct EventDispatcher {
     filter_track: Arc<dyn FilterTrackUseCase>,
     pass_track: Arc<dyn PassTrackUseCase>,
     get_settings: Arc<dyn GetSettingsUseCase>,
+    get_playlists: Arc<dyn GetPlaylistsUseCase>,
     save_settings: Arc<dyn SaveSettingsUseCase>,
 }
 
@@ -40,6 +42,7 @@ impl EventDispatcher {
         filter_track: Arc<dyn FilterTrackUseCase>,
         pass_track: Arc<dyn PassTrackUseCase>,
         get_settings: Arc<dyn GetSettingsUseCase>,
+        get_playlists: Arc<dyn GetPlaylistsUseCase>,
         save_settings: Arc<dyn SaveSettingsUseCase>,
     ) -> Self {
         Self {
@@ -51,6 +54,7 @@ impl EventDispatcher {
             filter_track,
             pass_track,
             get_settings,
+            get_playlists,
             save_settings,
         }
     }
@@ -80,6 +84,9 @@ impl EventDispatcher {
                 }
                 AppRequest::GetSettings => {
                     AppResponse::SettingsLoaded(self.get_settings.get_settings())
+                }
+                AppRequest::GetPlaylists => {
+                    AppResponse::PlaylistsLoaded(self.get_playlists.get_playlists())
                 }
                 AppRequest::SaveSettings(command) => {
                     AppResponse::SettingsSaved(self.save_settings.save_settings(command))

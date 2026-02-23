@@ -1,4 +1,4 @@
-use domain::ports::ports_in::settings::models::{FilterActionView, FilterTargetView};
+use domain::ports::ports_in::settings::models::{PassActionView, PassTargetView};
 
 use crate::adapters_out::repository::settings::dto::settings_dto::{
     FilterActionDto, PlaylistTargetDto, SettingsCacheDto, SettingsFileDto,
@@ -6,11 +6,11 @@ use crate::adapters_out::repository::settings::dto::settings_dto::{
 
 // ---- Cache ↔ View ----
 
-pub fn cache_dto_to_view(dto: SettingsCacheDto) -> (FilterActionView, FilterTargetView) {
+pub fn cache_dto_to_view(dto: SettingsCacheDto) -> (PassActionView, PassTargetView) {
     (action_dto_to_view(dto.filter_action), target_dto_to_view(dto.filter_target))
 }
 
-pub fn view_to_cache_dto(action: &FilterActionView, target: &FilterTargetView) -> SettingsCacheDto {
+pub fn view_to_cache_dto(action: &PassActionView, target: &PassTargetView) -> SettingsCacheDto {
     SettingsCacheDto {
         filter_action: action_view_to_dto(action),
         filter_target: target_view_to_dto(action, target),
@@ -19,11 +19,11 @@ pub fn view_to_cache_dto(action: &FilterActionView, target: &FilterTargetView) -
 
 // ---- File ↔ View ----
 
-pub fn file_dto_to_view(dto: SettingsFileDto) -> (FilterActionView, FilterTargetView) {
+pub fn file_dto_to_view(dto: SettingsFileDto) -> (PassActionView, PassTargetView) {
     (action_dto_to_view(dto.filter_action), target_dto_to_view(dto.filter_target))
 }
 
-pub fn view_to_file_dto(action: &FilterActionView, target: &FilterTargetView) -> SettingsFileDto {
+pub fn view_to_file_dto(action: &PassActionView, target: &PassTargetView) -> SettingsFileDto {
     SettingsFileDto {
         filter_action: action_view_to_dto(action),
         filter_target: target_view_to_dto(action, target),
@@ -32,35 +32,35 @@ pub fn view_to_file_dto(action: &FilterActionView, target: &FilterTargetView) ->
 
 // ---- Shared helpers ----
 
-fn action_dto_to_view(dto: FilterActionDto) -> FilterActionView {
+fn action_dto_to_view(dto: FilterActionDto) -> PassActionView {
     match dto {
-        FilterActionDto::None => FilterActionView::None,
-        FilterActionDto::AddToPlaylist => FilterActionView::AddToPlaylist,
-        FilterActionDto::MoveToPlaylist => FilterActionView::MoveToPlaylist,
+        FilterActionDto::None => PassActionView::None,
+        FilterActionDto::AddToPlaylist => PassActionView::AddToPlaylist,
+        FilterActionDto::MoveToPlaylist => PassActionView::MoveToPlaylist,
     }
 }
 
-fn target_dto_to_view(dto: Option<PlaylistTargetDto>) -> FilterTargetView {
+fn target_dto_to_view(dto: Option<PlaylistTargetDto>) -> PassTargetView {
     match dto {
-        Some(PlaylistTargetDto::Playlist(id)) => FilterTargetView::Playlist(id),
-        _ => FilterTargetView::LikedSongs,
+        Some(PlaylistTargetDto::Playlist(id)) => PassTargetView::Playlist(id),
+        _ => PassTargetView::LikedSongs,
     }
 }
 
-fn action_view_to_dto(action: &FilterActionView) -> FilterActionDto {
+fn action_view_to_dto(action: &PassActionView) -> FilterActionDto {
     match action {
-        FilterActionView::None => FilterActionDto::None,
-        FilterActionView::AddToPlaylist => FilterActionDto::AddToPlaylist,
-        FilterActionView::MoveToPlaylist => FilterActionDto::MoveToPlaylist,
+        PassActionView::None => FilterActionDto::None,
+        PassActionView::AddToPlaylist => FilterActionDto::AddToPlaylist,
+        PassActionView::MoveToPlaylist => FilterActionDto::MoveToPlaylist,
     }
 }
 
-fn target_view_to_dto(action: &FilterActionView, target: &FilterTargetView) -> Option<PlaylistTargetDto> {
+fn target_view_to_dto(action: &PassActionView, target: &PassTargetView) -> Option<PlaylistTargetDto> {
     match action {
-        FilterActionView::None => None,
+        PassActionView::None => None,
         _ => Some(match target {
-            FilterTargetView::Playlist(id) => PlaylistTargetDto::Playlist(id.clone()),
-            FilterTargetView::LikedSongs => PlaylistTargetDto::Liked,
+            PassTargetView::Playlist(id) => PlaylistTargetDto::Playlist(id.clone()),
+            PassTargetView::LikedSongs => PlaylistTargetDto::Liked,
         }),
     }
 }

@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod configuration;
 mod context;
 mod utils;
@@ -12,12 +14,13 @@ use domain::{
     ports::{
         ports_in::{
             events::{AppRequest, AppResponse},
+            settings::usecases::get_settings::GetSettingsUseCase,
             spotify::usecases::try_sign_in::TrySignInUseCase,
         },
         ports_out::{
             auth::{auth_url_builder::AuthUrlBuilder, pkce::PkceGenerator},
             browser::BrowserLauncher,
-            client::spotify_auth::SpotifyAuthClient,
+            client::{spotify_api::SpotifyApiClient, spotify_auth::SpotifyAuthClient},
             notification::ErrorNotification,
             repository::{
                 settings::{SettingsCache, SettingsStore},
@@ -28,6 +31,7 @@ use domain::{
     },
     usecases::{
         settings::{
+            get_playlists::GetPlaylistsInteractor,
             get_settings::GetSettingsInteractor,
             save_settings::SaveSettingsInteractor,
         },
@@ -57,7 +61,10 @@ use infrastructure::{
             spotify_auth_url::SpotifyAuthUrlBuilder,
         },
         browser::SystemBrowserLauncher,
-        client::spotify::spotify_auth_client::UreqSpotifyAuthClient,
+        client::spotify::{
+            spotify_api_client::UreqSpotifyApiClient,
+            spotify_auth_client::UreqSpotifyAuthClient,
+        },
         notification::ToastErrorNotification,
         repository::{
             settings::{
@@ -135,6 +142,7 @@ struct AuthUseCases {
     sign_in: Arc<SignInInteractor>,
     sign_out: Arc<SignOutInteractor>,
     try_sign_in: Arc<TrySignInInteractor>,
+    token_cache: Arc<dyn TokenCache>,
 }
 
 fn build_auth_use_cases(
@@ -188,16 +196,16 @@ fn build_auth_use_cases(
 
     let try_sign_in = Arc::new(TrySignInInteractor::new(
         auth_client,
-        token_cache,
+        Arc::clone(&token_cache),
         refresh_token_store,
     ));
 
-    AuthUseCases { sign_in, sign_out, try_sign_in }
+    AuthUseCases { sign_in, sign_out, try_sign_in, token_cache }
 }
 
 fn main() -> Result<(), slint::PlatformError> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
+        .with_max_level(tracing::Level::ERROR)
         .init();
 
     let config = Configuration::load();
@@ -206,13 +214,30 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Auth use-cases
     let auth = build_auth_use_cases(&config, Arc::clone(&notifier));
-    let pass_track = Arc::new(PassTrackInteractor::new(Arc::clone(&notifier)));
-    let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&notifier)));
+
+    // Spotify API client
+    let api_paths = config.app.spotify.api.paths.into_iter()
+        .map(|(k, v)| (k.to_kebab_str().to_string(), v))
+        .collect();
+    let api_client: Arc<dyn SpotifyApiClient> = Arc::new(UreqSpotifyApiClient::new(
+        config.app.spotify.api.url.clone(),
+        api_paths,
+        Arc::clone(&auth.token_cache),
+    ));
+
+    let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));
 
     let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
     let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
     let get_settings = Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(&notifier)));
+    let get_playlists = Arc::new(GetPlaylistsInteractor::new(Arc::clone(&api_client)));
     let save_settings = Arc::new(SaveSettingsInteractor::new(cache, file, Arc::clone(&notifier)));
+
+    let pass_track = Arc::new(PassTrackInteractor::new(
+        Arc::clone(&api_client),
+        Arc::clone(&get_settings) as Arc<dyn GetSettingsUseCase>,
+        Arc::clone(&notifier),
+    ));
 
     // Channels
     let (request_tx, request_rx) = mpsc::channel::<AppRequest>();
@@ -238,6 +263,7 @@ fn main() -> Result<(), slint::PlatformError> {
         filter_track,
         pass_track,
         get_settings,
+        get_playlists,
         save_settings,
     );
     std::thread::spawn(move || dispatcher.run());

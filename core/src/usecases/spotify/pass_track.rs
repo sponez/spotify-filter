@@ -1,26 +1,101 @@
 use std::sync::Arc;
 
 use crate::{
-    errors::errors::AppResult,
-    ports::{
-        ports_in::spotify::usecases::pass_track::PassTrackUseCase,
-        ports_out::notification::ErrorNotification,
-    },
+    domain::{models::spotify_uri::{SpotifyUri, SpotifyUriType}, uri_parser::parse_spotify_uri}, errors::errors::AppResult, ports::{
+        ports_in::{settings::{models::{PassActionView, PassTargetView}, usecases::get_settings::GetSettingsUseCase}, spotify::usecases::pass_track::PassTrackUseCase},
+        ports_out::{client::spotify_api::{CurrentlyPlayingResponse, SpotifyApiClient}, notification::ErrorNotification},
+    }
 };
 
 pub struct PassTrackInteractor {
+    api_client: Arc<dyn SpotifyApiClient>,
+    settings_provider: Arc<dyn GetSettingsUseCase>,
     notifier: Arc<dyn ErrorNotification>,
 }
 
 impl PassTrackInteractor {
-    pub fn new(notifier: Arc<dyn ErrorNotification>) -> Self {
-        Self { notifier }
+    pub fn new(
+        api_client: Arc<dyn SpotifyApiClient>,
+        settings_provider: Arc<dyn GetSettingsUseCase>,
+        notifier: Arc<dyn ErrorNotification>
+    ) -> Self {
+        Self { api_client, settings_provider, notifier }
+    }
+
+    fn pass_track(&self, track: CurrentlyPlayingResponse) -> AppResult<()> {
+        let settings = self.settings_provider.get_settings()?;
+
+        if let Some(context_uri_str) = track.context_uri {
+            let context_uri = parse_spotify_uri(&context_uri_str)?;
+            
+            match settings.pass_action {
+                PassActionView::None => {
+                    self.api_client.skip_to_next()?;
+                },
+                PassActionView::AddToPlaylist => {
+                    self.add_to_playlist(&context_uri, &settings.pass_target, &track.track_uri)?;
+                },
+                PassActionView::MoveToPlaylist => {
+                    self.move_to_playlist(&context_uri, &settings.pass_target, &track.track_uri)?;
+                },
+            }
+        }
+        Ok(())
+    }
+
+    fn add_to_playlist(&self, context_uri: &SpotifyUri, pass_target: &PassTargetView, track_uri: &str) -> AppResult<()> {
+        match pass_target {
+            PassTargetView::LikedSongs => {
+                if !context_uri.is_collection() {
+                    self.api_client.add_to_library(&[track_uri])?;
+                }
+            },
+            PassTargetView::Playlist(playlist_id) => {
+                if context_uri.uri_type != SpotifyUriType::Playlist || context_uri.id != *playlist_id {
+                    self.api_client.add_to_playlist(playlist_id, &[track_uri])?;
+                }
+            },
+        }
+        self.api_client.skip_to_next()?;
+        Ok(())
+    }
+
+    fn move_to_playlist(&self, context_uri: &SpotifyUri, pass_target: &PassTargetView, track_uri: &str) -> AppResult<()> {
+        match pass_target {
+            PassTargetView::LikedSongs => {
+                if !context_uri.is_collection() {
+                    self.api_client.add_to_library(&[track_uri])?;
+                }
+            },
+            PassTargetView::Playlist(playlist_id) => {
+                if context_uri.uri_type != SpotifyUriType::Playlist || context_uri.id != *playlist_id {
+                    self.api_client.add_to_playlist(playlist_id, &[track_uri])?;
+                }
+            },
+        }
+
+        if context_uri.uri_type == SpotifyUriType::Playlist && *pass_target != PassTargetView::Playlist(context_uri.id.clone()) {
+            let playlist_snapshot = self.api_client.get_playlist_snapshot(&context_uri.id)?;
+            self.api_client.remove_from_playlist(&context_uri.id, &[track_uri], &playlist_snapshot.snapshot_id)?;
+        }
+
+        self.api_client.skip_to_next()?;
+        Ok(())
     }
 }
 
 impl PassTrackUseCase for PassTrackInteractor {
     fn pass_current_track(&self) -> AppResult<()> {
-        self.notifier.notify("Pass track is not implemented yet");
+        match self.api_client.get_currently_playing() {
+            Ok(Some(track)) => {
+                self.pass_track(track)?;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                self.notifier.notify(&e.to_string());
+                return Err(e);
+            }
+        }
         Ok(())
     }
 }
