@@ -9,9 +9,12 @@ pub fn run(
     tx: Sender<AppRequest>,
     rx: Receiver<AppResponse>,
     initially_authorized: bool,
+    filter_hotkey: &str,
+    pass_hotkey: &str,
 ) -> Result<(), slint::PlatformError> {
     let window = UiWindow::create_and_set_up_callbacks(tx.clone());
 
+    window.set_hotkeys(filter_hotkey, pass_hotkey);
     window.start_event_poll(tx, rx);
 
     if initially_authorized {

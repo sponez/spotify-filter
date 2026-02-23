@@ -34,7 +34,7 @@ impl TrySignInUseCase for TrySignInInteractor {
         };
 
         let tokens = self.auth_client.refresh_token(&refresh_token)?;
-        self.token_cache.store(&tokens.access_token);
+        self.token_cache.store(&tokens.access_token, tokens.expires_in);
         if tokens.refresh_token != refresh_token {
             self.refresh_token_store.store(&tokens.refresh_token)?;
         }

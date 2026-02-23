@@ -16,8 +16,10 @@ use domain::ports::ports_in::{
         pass_track::PassTrackUseCase,
         sign_in::SignInUseCase,
         sign_out::SignOutUseCase,
+        try_sign_in::TrySignInUseCase,
     },
 };
+use domain::ports::ports_out::repository::token::TokenCache;
 
 pub struct EventDispatcher {
     rx: Receiver<AppRequest>,
@@ -30,6 +32,8 @@ pub struct EventDispatcher {
     get_settings: Arc<dyn GetSettingsUseCase>,
     get_playlists: Arc<dyn GetPlaylistsUseCase>,
     save_settings: Arc<dyn SaveSettingsUseCase>,
+    try_sign_in: Arc<dyn TrySignInUseCase>,
+    token_cache: Arc<dyn TokenCache>,
 }
 
 impl EventDispatcher {
@@ -44,6 +48,8 @@ impl EventDispatcher {
         get_settings: Arc<dyn GetSettingsUseCase>,
         get_playlists: Arc<dyn GetPlaylistsUseCase>,
         save_settings: Arc<dyn SaveSettingsUseCase>,
+        try_sign_in: Arc<dyn TrySignInUseCase>,
+        token_cache: Arc<dyn TokenCache>,
     ) -> Self {
         Self {
             rx,
@@ -56,6 +62,14 @@ impl EventDispatcher {
             get_settings,
             get_playlists,
             save_settings,
+            try_sign_in,
+            token_cache,
+        }
+    }
+
+    fn refresh_token_if_needed(&self) {
+        if self.token_cache.is_expiring_soon() {
+            let _ = self.try_sign_in.try_sign_in();
         }
     }
 
@@ -77,15 +91,18 @@ impl EventDispatcher {
                     AppResponse::SignOutCompleted(result)
                 }
                 AppRequest::FilterTrack => {
+                    self.refresh_token_if_needed();
                     AppResponse::FilterTrackCompleted(self.filter_track.filter_current_track())
                 }
                 AppRequest::PassTrack => {
+                    self.refresh_token_if_needed();
                     AppResponse::PassTrackCompleted(self.pass_track.pass_current_track())
                 }
                 AppRequest::GetSettings => {
                     AppResponse::SettingsLoaded(self.get_settings.get_settings())
                 }
                 AppRequest::GetPlaylists => {
+                    self.refresh_token_if_needed();
                     AppResponse::PlaylistsLoaded(self.get_playlists.get_playlists())
                 }
                 AppRequest::SaveSettings(command) => {

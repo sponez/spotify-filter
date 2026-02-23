@@ -84,7 +84,7 @@ impl SignInUseCase for SignInInteractor {
             e
         })?;
 
-        self.token_cache.store(&tokens.access_token);
+        self.token_cache.store(&tokens.access_token, tokens.expires_in);
         self.refresh_token_store.store(&tokens.refresh_token).map_err(|e| {
             self.notifier.notify(&e.to_string());
             e
