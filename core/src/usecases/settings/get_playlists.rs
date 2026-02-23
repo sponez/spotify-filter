@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{error, info};
 
 use crate::ports::{
     ports_in::settings::{
@@ -20,8 +21,13 @@ impl GetPlaylistsInteractor {
 
 impl GetPlaylistsUseCase for GetPlaylistsInteractor {
     fn get_playlists(&self) -> Vec<PlaylistItemView> {
+        info!("Loading playlists from Spotify");
         self.api_client
             .get_my_playlists()
+            .map_err(|e| {
+                error!(error = %e, "Failed to load playlists");
+                e
+            })
             .unwrap_or_default()
             .into_iter()
             .map(|p| PlaylistItemView { id: p.id, name: p.name })

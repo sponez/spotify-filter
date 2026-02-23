@@ -3,6 +3,7 @@ use domain::{
     ports::ports_out::client::spotify_auth::{SpotifyAuthClient, TokenResponse},
 };
 use serde::Deserialize;
+use tracing::{error, info};
 
 pub struct UreqSpotifyAuthClient {
     token_uri: String,
@@ -32,6 +33,7 @@ struct SpotifyRefreshResponse {
 
 impl SpotifyAuthClient for UreqSpotifyAuthClient {
     fn exchange_code(&self, code: &str, code_verifier: &str) -> AppResult<TokenResponse> {
+        info!("Exchanging authorization code for access token");
         let resp: SpotifyTokenResponse = ureq::post(&self.token_uri)
             .send_form(&[
                 ("grant_type", "authorization_code"),
@@ -40,9 +42,15 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
                 ("client_id", &self.client_id),
                 ("code_verifier", code_verifier),
             ])
-            .map_err(|e| anyhow::anyhow!("Token exchange request failed: {e}"))?
+            .map_err(|e| {
+                error!(error = %e, "Token exchange request failed");
+                anyhow::anyhow!("Token exchange request failed: {e}")
+            })?
             .into_json()
-            .map_err(|e| anyhow::anyhow!("Failed to parse token response: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to parse token exchange response");
+                anyhow::anyhow!("Failed to parse token response: {e}")
+            })?;
 
         Ok(TokenResponse {
             access_token: resp.access_token,
@@ -52,15 +60,22 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
     }
 
     fn refresh_token(&self, refresh_token: &str) -> AppResult<TokenResponse> {
+        info!("Refreshing Spotify access token");
         let resp: SpotifyRefreshResponse = ureq::post(&self.token_uri)
             .send_form(&[
                 ("grant_type", "refresh_token"),
                 ("refresh_token", refresh_token),
                 ("client_id", &self.client_id),
             ])
-            .map_err(|e| anyhow::anyhow!("Token refresh request failed: {e}"))?
+            .map_err(|e| {
+                error!(error = %e, "Token refresh request failed");
+                anyhow::anyhow!("Token refresh request failed: {e}")
+            })?
             .into_json()
-            .map_err(|e| anyhow::anyhow!("Failed to parse refresh response: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to parse token refresh response");
+                anyhow::anyhow!("Failed to parse refresh response: {e}")
+            })?;
 
         Ok(TokenResponse {
             access_token: resp.access_token,

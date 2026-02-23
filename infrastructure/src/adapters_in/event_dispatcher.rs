@@ -3,6 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::{Receiver, Sender},
 };
+use tracing::{debug, error, info, warn};
 
 use domain::ports::ports_in::{
     events::{AppRequest, AppResponse},
@@ -69,17 +70,38 @@ impl EventDispatcher {
 
     fn refresh_token_if_needed(&self) {
         if self.token_cache.is_expiring_soon() {
-            let _ = self.try_sign_in.try_sign_in();
+            info!("Access token expiring soon, trying refresh");
+            match self.try_sign_in.try_sign_in() {
+                Ok(true) => info!("Token refresh succeeded"),
+                Ok(false) => warn!("Token refresh skipped: no refresh token"),
+                Err(e) => error!(error = %e, "Token refresh failed"),
+            }
         }
     }
 
     pub fn run(self) {
+        info!("Event dispatcher loop started");
         while let Ok(request) = self.rx.recv() {
+            let request_name = match &request {
+                AppRequest::SignIn => "SignIn",
+                AppRequest::SignOut => "SignOut",
+                AppRequest::FilterTrack => "FilterTrack",
+                AppRequest::PassTrack => "PassTrack",
+                AppRequest::GetSettings => "GetSettings",
+                AppRequest::GetPlaylists => "GetPlaylists",
+                AppRequest::SaveSettings(_) => "SaveSettings",
+                AppRequest::ShowWindow => "ShowWindow",
+                AppRequest::Quit => "Quit",
+            };
+            debug!(request = request_name, "Received app request");
             let response = match request {
                 AppRequest::SignIn => {
                     let result = self.sign_in.sign_in();
                     if result.is_ok() {
                         self.authorized.store(true, Ordering::Relaxed);
+                        info!("Authorization state set to signed-in");
+                    } else if let Err(ref e) = result {
+                        error!(error = %e, "Sign-in failed");
                     }
                     AppResponse::SignInCompleted(result)
                 }
@@ -87,34 +109,55 @@ impl EventDispatcher {
                     let result = self.sign_out.sign_out();
                     if result.is_ok() {
                         self.authorized.store(false, Ordering::Relaxed);
+                        info!("Authorization state set to signed-out");
+                    } else if let Err(ref e) = result {
+                        error!(error = %e, "Sign-out failed");
                     }
                     AppResponse::SignOutCompleted(result)
                 }
                 AppRequest::FilterTrack => {
                     self.refresh_token_if_needed();
-                    AppResponse::FilterTrackCompleted(self.filter_track.filter_current_track())
+                    let result = self.filter_track.filter_current_track();
+                    if let Err(ref e) = result {
+                        error!(error = %e, "Filter track command failed");
+                    }
+                    AppResponse::FilterTrackCompleted(result)
                 }
                 AppRequest::PassTrack => {
                     self.refresh_token_if_needed();
-                    AppResponse::PassTrackCompleted(self.pass_track.pass_current_track())
+                    let result = self.pass_track.pass_current_track();
+                    if let Err(ref e) = result {
+                        error!(error = %e, "Pass track command failed");
+                    }
+                    AppResponse::PassTrackCompleted(result)
                 }
                 AppRequest::GetSettings => {
-                    AppResponse::SettingsLoaded(self.get_settings.get_settings())
+                    let result = self.get_settings.get_settings();
+                    if let Err(ref e) = result {
+                        error!(error = %e, "Get settings command failed");
+                    }
+                    AppResponse::SettingsLoaded(result)
                 }
                 AppRequest::GetPlaylists => {
                     self.refresh_token_if_needed();
                     AppResponse::PlaylistsLoaded(self.get_playlists.get_playlists())
                 }
                 AppRequest::SaveSettings(command) => {
-                    AppResponse::SettingsSaved(self.save_settings.save_settings(command))
+                    let result = self.save_settings.save_settings(command);
+                    if let Err(ref e) = result {
+                        error!(error = %e, "Save settings command failed");
+                    }
+                    AppResponse::SettingsSaved(result)
                 }
                 AppRequest::ShowWindow => AppResponse::ShowWindow,
                 AppRequest::Quit => {
+                    info!("Quit requested");
                     let _ = self.tx.send(AppResponse::Quit);
                     break;
                 }
             };
             let _ = self.tx.send(response);
         }
+        warn!("Event dispatcher loop ended");
     }
 }

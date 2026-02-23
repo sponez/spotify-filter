@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{error, info, warn};
 
 use crate::{
     errors::errors::AppResult,
@@ -29,15 +30,21 @@ impl TrySignInInteractor {
 
 impl TrySignInUseCase for TrySignInInteractor {
     fn try_sign_in(&self) -> AppResult<bool> {
+        info!("Attempting silent sign-in");
         let Some(refresh_token) = self.refresh_token_store.load()? else {
+            warn!("No refresh token found for silent sign-in");
             return Ok(false);
         };
 
-        let tokens = self.auth_client.refresh_token(&refresh_token)?;
+        let tokens = self.auth_client.refresh_token(&refresh_token).map_err(|e| {
+            error!(error = %e, "Silent sign-in token refresh failed");
+            e
+        })?;
         self.token_cache.store(&tokens.access_token, tokens.expires_in);
         if tokens.refresh_token != refresh_token {
             self.refresh_token_store.store(&tokens.refresh_token)?;
         }
+        info!("Silent sign-in succeeded");
         Ok(true)
     }
 }

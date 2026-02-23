@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{error, info};
 
 use crate::{
     errors::errors::AppResult,
@@ -29,11 +30,14 @@ impl SignOutInteractor {
 
 impl SignOutUseCase for SignOutInteractor {
     fn sign_out(&self) -> AppResult<()> {
+        info!("Sign-out started");
         self.token_cache.clear();
         self.refresh_token_store.delete().map_err(|e| {
+            error!(error = %e, "Failed to delete refresh token");
             self.notifier.notify(&e.to_string());
             e
         })?;
+        info!("Sign-out completed");
         Ok(())
     }
 }

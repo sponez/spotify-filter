@@ -11,6 +11,7 @@ use domain::{
     },
 };
 use serde::Deserialize;
+use tracing::{debug, error, info};
 
 pub struct UreqSpotifyApiClient {
     base_url: String,
@@ -83,21 +84,29 @@ struct SpotifyPlaylistItem {
 
 impl SpotifyApiClient for UreqSpotifyApiClient {
     fn get_currently_playing(&self) -> AppResult<Option<CurrentlyPlayingResponse>> {
+        info!("Spotify API: get currently playing");
         let token = self.token()?;
         let url = self.url("currently-playing")?;
 
         let response = ureq::get(&url)
             .set("Authorization", &format!("Bearer {token}"))
             .call()
-            .map_err(|e| anyhow::anyhow!("Failed to get currently playing: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to get currently playing");
+                anyhow::anyhow!("Failed to get currently playing: {e}")
+            })?;
 
         if response.status() == 204 {
+            debug!("Spotify API: currently playing returned 204");
             return Ok(None);
         }
 
         let body: SpotifyCurrentlyPlaying = response
             .into_json()
-            .map_err(|e| anyhow::anyhow!("Failed to parse currently playing response: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to parse currently playing response");
+                anyhow::anyhow!("Failed to parse currently playing response: {e}")
+            })?;
 
         Ok(body.item.map(|item| CurrentlyPlayingResponse {
             context_uri: body.context.map(|c| c.uri),
@@ -106,15 +115,22 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
     }
 
     fn get_playlist_snapshot(&self, playlist_id: &str) -> AppResult<PlaylistSnapshotResponse> {
+        info!(playlist_id, "Spotify API: get playlist snapshot");
         let token = self.token()?;
         let url = format!("{}?fields=snapshot_id", self.url_with_id("playlist", playlist_id)?);
 
         let body: SpotifyPlaylistSnapshot = ureq::get(&url)
             .set("Authorization", &format!("Bearer {token}"))
             .call()
-            .map_err(|e| anyhow::anyhow!("Failed to get playlist snapshot: {e}"))?
+            .map_err(|e| {
+                error!(error = %e, "Failed to get playlist snapshot");
+                anyhow::anyhow!("Failed to get playlist snapshot: {e}")
+            })?
             .into_json()
-            .map_err(|e| anyhow::anyhow!("Failed to parse playlist snapshot response: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to parse playlist snapshot response");
+                anyhow::anyhow!("Failed to parse playlist snapshot response: {e}")
+            })?;
 
         Ok(PlaylistSnapshotResponse {
             snapshot_id: body.snapshot_id,
@@ -122,6 +138,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
     }
 
     fn get_my_playlists(&self) -> AppResult<Vec<PlaylistSummary>> {
+        info!("Spotify API: get my playlists");
         let token = self.token()?;
         let base_url = self.url("my-playlists")?;
         let mut all = Vec::new();
@@ -132,9 +149,15 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
             let page: SpotifyPaginatedPlaylists = ureq::get(&url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .call()
-                .map_err(|e| anyhow::anyhow!("Failed to get playlists: {e}"))?
+                .map_err(|e| {
+                    error!(error = %e, "Failed to get playlists");
+                    anyhow::anyhow!("Failed to get playlists: {e}")
+                })?
                 .into_json()
-                .map_err(|e| anyhow::anyhow!("Failed to parse playlists response: {e}"))?;
+                .map_err(|e| {
+                    error!(error = %e, "Failed to parse playlists response");
+                    anyhow::anyhow!("Failed to parse playlists response: {e}")
+                })?;
 
             all.extend(page.items.into_iter().map(|p| PlaylistSummary {
                 id: p.id,
@@ -151,6 +174,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
     }
 
     fn add_to_library(&self, uris: &[&str]) -> AppResult<()> {
+        info!(count = uris.len(), "Spotify API: add to library");
         let token = self.token()?;
         let ids = uris.join(",");
         let url = format!("{}?uris={ids}", self.url("library")?);
@@ -158,12 +182,16 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         ureq::put(&url)
             .set("Authorization", &format!("Bearer {token}"))
             .call()
-            .map_err(|e| anyhow::anyhow!("Failed to add to library: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to add to library");
+                anyhow::anyhow!("Failed to add to library: {e}")
+            })?;
 
         Ok(())
     }
 
     fn remove_from_library(&self, uris: &[&str]) -> AppResult<()> {
+        info!(count = uris.len(), "Spotify API: remove from library");
         let token = self.token()?;
         let ids = uris.join(",");
         let url = format!("{}?uris={ids}", self.url("library")?);
@@ -171,12 +199,16 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         ureq::request("DELETE", &url)
             .set("Authorization", &format!("Bearer {token}"))
             .call()
-            .map_err(|e| anyhow::anyhow!("Failed to remove from library: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to remove from library");
+                anyhow::anyhow!("Failed to remove from library: {e}")
+            })?;
 
         Ok(())
     }
 
     fn add_to_playlist(&self, playlist_id: &str, uris: &[&str]) -> AppResult<()> {
+        info!(playlist_id, count = uris.len(), "Spotify API: add to playlist");
         let token = self.token()?;
         let url = self.url_with_id("playlist-items", playlist_id)?;
 
@@ -184,7 +216,10 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
             .set("Authorization", &format!("Bearer {token}"))
             .set("Content-Type", "application/json")
             .send_json(ureq::json!({ "uris": uris, "position": 0 }))
-            .map_err(|e| anyhow::anyhow!("Failed to add to playlist: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to add to playlist");
+                anyhow::anyhow!("Failed to add to playlist: {e}")
+            })?;
 
         Ok(())
     }
@@ -195,6 +230,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         uris: &[&str],
         snapshot_id: &str,
     ) -> AppResult<()> {
+        info!(playlist_id, count = uris.len(), "Spotify API: remove from playlist");
         let token = self.token()?;
         let url = self.url_with_id("playlist-items", playlist_id)?;
 
@@ -207,12 +243,16 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
                 "items": tracks,
                 "snapshot_id": snapshot_id,
             }))
-            .map_err(|e| anyhow::anyhow!("Failed to remove from playlist: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to remove from playlist");
+                anyhow::anyhow!("Failed to remove from playlist: {e}")
+            })?;
 
         Ok(())
     }
 
     fn skip_to_next(&self) -> AppResult<()> {
+        info!("Spotify API: skip to next");
         let token = self.token()?;
         let url = self.url("next-track")?;
 
@@ -220,7 +260,10 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
             .set("Authorization", &format!("Bearer {token}"))
             .set("Content-Length", "0")
             .call()
-            .map_err(|e| anyhow::anyhow!("Failed to skip to next track: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to skip to next track");
+                anyhow::anyhow!("Failed to skip to next track: {e}")
+            })?;
 
         Ok(())
     }
