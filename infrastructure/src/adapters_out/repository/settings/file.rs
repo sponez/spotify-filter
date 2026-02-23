@@ -1,5 +1,5 @@
 use domain::ports::{
-    ports_in::settings::models::{FilterActionView, FilterTargetView},
+    ports_in::settings::models::{PassActionView, PassTargetView},
     ports_out::repository::settings::{SettingsStore, SettingsStoreError},
 };
 
@@ -23,13 +23,13 @@ impl JsonFileSettingsStore {
             .unwrap_or_else(|| std::path::PathBuf::from("settings.json"))
     }
 
-    fn default_settings() -> (FilterActionView, FilterTargetView) {
+    fn default_settings() -> (PassActionView, PassTargetView) {
         file_dto_to_view(SettingsFileDto::default())
     }
 }
 
 impl SettingsStore for JsonFileSettingsStore {
-    fn load(&self) -> Result<(FilterActionView, FilterTargetView), SettingsStoreError> {
+    fn load(&self) -> Result<(PassActionView, PassTargetView), SettingsStoreError> {
         let path = Self::path();
 
         if path.exists() {
@@ -43,7 +43,7 @@ impl SettingsStore for JsonFileSettingsStore {
         }
     }
 
-    fn save(&self, action: &FilterActionView, target: &FilterTargetView) -> Result<(), SettingsStoreError> {
+    fn save(&self, action: &PassActionView, target: &PassTargetView) -> Result<(), SettingsStoreError> {
         let path = Self::path();
         let tmp = path.with_extension("tmp");
 

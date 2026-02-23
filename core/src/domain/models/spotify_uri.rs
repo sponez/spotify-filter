@@ -21,3 +21,9 @@ pub struct SpotifyUri {
     pub id: String,
     pub user_subpath: Option<SpotifyUserSubpath>,
 }
+
+impl SpotifyUri {
+    pub fn is_collection(&self) -> bool {
+        self.uri_type == SpotifyUriType::User && self.user_subpath == Some(SpotifyUserSubpath::Collection)
+    }
+}

@@ -56,11 +56,6 @@ impl FilterTrackUseCase for FilterTrackInteractor {
     fn filter_current_track(&self) -> AppResult<()> {
         match self.api_client.get_currently_playing() {
             Ok(Some(track)) => {
-                println!(
-                    "Currently playing: track={} context={:?}",
-                    track.track_uri,
-                    track.context_uri,
-                );
                 self.filter_track(track)?;
             }
             Ok(None) => {}

@@ -1,7 +1,7 @@
 use std::sync::{Mutex, MutexGuard};
 
 use domain::ports::{
-    ports_in::settings::models::{FilterActionView, FilterTargetView},
+    ports_in::settings::models::{PassActionView, PassTargetView},
     ports_out::repository::settings::SettingsCache,
 };
 
@@ -35,12 +35,12 @@ impl LocalSettingsCache {
 }
 
 impl SettingsCache for LocalSettingsCache {
-    fn load(&self) -> Option<(FilterActionView, FilterTargetView)> {
+    fn load(&self) -> Option<(PassActionView, PassTargetView)> {
         let g = self.lock_or_reset();
         g.clone().map(cache_dto_to_view)
     }
 
-    fn store(&self, action: &FilterActionView, target: &FilterTargetView) {
+    fn store(&self, action: &PassActionView, target: &PassTargetView) {
         let mut g = self.lock_or_reset();
         *g = Some(view_to_cache_dto(action, target));
     }

@@ -12,6 +12,7 @@ use domain::{
     ports::{
         ports_in::{
             events::{AppRequest, AppResponse},
+            settings::usecases::get_settings::GetSettingsUseCase,
             spotify::usecases::try_sign_in::TrySignInUseCase,
         },
         ports_out::{
@@ -28,6 +29,7 @@ use domain::{
     },
     usecases::{
         settings::{
+            get_playlists::GetPlaylistsInteractor,
             get_settings::GetSettingsInteractor,
             save_settings::SaveSettingsInteractor,
         },
@@ -221,13 +223,19 @@ fn main() -> Result<(), slint::PlatformError> {
         Arc::clone(&auth.token_cache),
     ));
 
-    let pass_track = Arc::new(PassTrackInteractor::new(Arc::clone(&notifier)));
     let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));
 
     let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
     let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
-    let get_settings = Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(&api_client), Arc::clone(&notifier)));
+    let get_settings = Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(&notifier)));
+    let get_playlists = Arc::new(GetPlaylistsInteractor::new(Arc::clone(&api_client)));
     let save_settings = Arc::new(SaveSettingsInteractor::new(cache, file, Arc::clone(&notifier)));
+
+    let pass_track = Arc::new(PassTrackInteractor::new(
+        Arc::clone(&api_client),
+        Arc::clone(&get_settings) as Arc<dyn GetSettingsUseCase>,
+        Arc::clone(&notifier),
+    ));
 
     // Channels
     let (request_tx, request_rx) = mpsc::channel::<AppRequest>();
@@ -253,6 +261,7 @@ fn main() -> Result<(), slint::PlatformError> {
         filter_track,
         pass_track,
         get_settings,
+        get_playlists,
         save_settings,
     );
     std::thread::spawn(move || dispatcher.run());
