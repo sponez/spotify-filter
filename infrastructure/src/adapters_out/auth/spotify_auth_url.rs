@@ -1,4 +1,5 @@
 use domain::ports::ports_out::auth::auth_url_builder::AuthUrlBuilder;
+use tracing::debug;
 use url::Url;
 
 pub struct SpotifyAuthUrlBuilder {
@@ -21,6 +22,7 @@ impl SpotifyAuthUrlBuilder {
 
 impl AuthUrlBuilder for SpotifyAuthUrlBuilder {
     fn build_authorize_url(&self, code_challenge: &str, state: &str) -> String {
+        debug!("Building Spotify authorization URL");
         let mut url = Url::parse(&self.auth_uri)
             .expect("invalid auth_uri in configuration");
 

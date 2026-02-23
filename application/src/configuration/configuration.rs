@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use tracing::{debug, info};
 
 use crate::configuration::models::hotkeys::HotkeysConfig;
 use crate::configuration::models::spotify::SpotifyConfig;
@@ -16,6 +17,7 @@ pub struct Configuration {
 
 impl Configuration {
     pub fn load() -> Self {
+        info!("Loading configuration");
         let exe = std::env::current_exe().expect("cannot determine executable path");
         let dir = exe.parent().expect("executable has no parent directory");
 
@@ -35,6 +37,11 @@ impl Configuration {
         config.app.spotify.auth.client_secret = std::env::var("SPOTIFY_CLIENT_SECRET")
             .expect("SPOTIFY_CLIENT_SECRET must be set in .env");
 
+        debug!(
+            redirect_uri = %config.app.spotify.auth.redirect_uri,
+            scopes = config.app.spotify.auth.scopes.len(),
+            "Configuration loaded"
+        );
         config
     }
 }

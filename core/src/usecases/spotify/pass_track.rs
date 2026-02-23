@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{debug, error, info};
 
 use crate::{
     domain::{models::spotify_uri::{SpotifyUri, SpotifyUriType}, uri_parser::parse_spotify_uri}, errors::errors::AppResult, ports::{
@@ -23,19 +24,24 @@ impl PassTrackInteractor {
     }
 
     fn pass_track(&self, track: CurrentlyPlayingResponse) -> AppResult<()> {
+        info!(track_uri = %track.track_uri, "Pass current track requested");
         let settings = self.settings_provider.get_settings()?;
 
         if let Some(context_uri_str) = track.context_uri {
             let context_uri = parse_spotify_uri(&context_uri_str)?;
+            debug!(context_uri = %context_uri_str, "Resolved playback context");
             
             match settings.pass_action {
                 PassActionView::None => {
+                    info!("Pass action: skip only");
                     self.api_client.skip_to_next()?;
                 },
                 PassActionView::AddToPlaylist => {
+                    info!("Pass action: add to target");
                     self.add_to_playlist(&context_uri, &settings.pass_target, &track.track_uri)?;
                 },
                 PassActionView::MoveToPlaylist => {
+                    info!("Pass action: move to target");
                     self.move_to_playlist(&context_uri, &settings.pass_target, &track.track_uri)?;
                 },
             }
@@ -86,16 +92,25 @@ impl PassTrackInteractor {
 
 impl PassTrackUseCase for PassTrackInteractor {
     fn pass_current_track(&self) -> AppResult<()> {
+        info!("Pass track requested");
         match self.api_client.get_currently_playing() {
             Ok(Some(track)) => {
-                self.pass_track(track)?;
+                self.pass_track(track).map_err(|e| {
+                    error!(error = %e, "Failed to pass current track");
+                    self.notifier.notify(&e.to_string());
+                    e
+                })?;
             }
-            Ok(None) => {}
+            Ok(None) => {
+                debug!("Nothing is currently playing");
+            }
             Err(e) => {
+                error!(error = %e, "Failed to read currently playing track");
                 self.notifier.notify(&e.to_string());
                 return Err(e);
             }
         }
+        info!("Pass track completed");
         Ok(())
     }
 }

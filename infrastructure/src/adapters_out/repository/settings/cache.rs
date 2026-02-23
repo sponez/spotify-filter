@@ -1,4 +1,5 @@
 use std::sync::{Mutex, MutexGuard};
+use tracing::debug;
 
 use domain::ports::{
     ports_in::settings::models::{PassActionView, PassTargetView},
@@ -36,11 +37,13 @@ impl LocalSettingsCache {
 
 impl SettingsCache for LocalSettingsCache {
     fn load(&self) -> Option<(PassActionView, PassTargetView)> {
+        debug!("Loading settings from in-memory cache");
         let g = self.lock_or_reset();
         g.clone().map(cache_dto_to_view)
     }
 
     fn store(&self, action: &PassActionView, target: &PassTargetView) {
+        debug!("Storing settings in in-memory cache");
         let mut g = self.lock_or_reset();
         *g = Some(view_to_cache_dto(action, target));
     }

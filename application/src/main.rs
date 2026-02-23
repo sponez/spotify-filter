@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod configuration;
 mod context;
@@ -47,6 +47,8 @@ use domain::{
 use global_hotkey::GlobalHotKeyManager;
 use gui;
 use image::GenericImageView;
+use tracing::{debug, error, info, warn};
+use tracing_subscriber::EnvFilter;
 
 use configuration::configuration::Configuration;
 use infrastructure::{
@@ -84,6 +86,7 @@ use tray_icon::{Icon, TrayIconBuilder, menu::{Menu, MenuId, MenuItem}};
 use crate::{context::ApplicationContext, utils::hotkey_parser::parse_hotkey};
 
 fn load_icon_rgba() -> (Vec<u8>, u32, u32) {
+    debug!("Loading tray icon from embedded resources");
     let bytes = include_bytes!("../resources/icon.png");
     let img = image::load_from_memory(bytes).expect("valid icon image");
     let (width, height) = img.dimensions();
@@ -92,34 +95,37 @@ fn load_icon_rgba() -> (Vec<u8>, u32, u32) {
 }
 
 fn setup_tray_icon(context: &mut ApplicationContext, icon_rgba: Vec<u8>, width: u32, height: u32) -> (MenuId, MenuId, MenuId) {
+    info!("Setting up tray icon");
     let item_show = MenuItem::new("Show", true, None);
-        let item_sign_out = MenuItem::new("Sign Out", true, None);
-        let item_quit = MenuItem::new("Quit", true, None);
+    let item_sign_out = MenuItem::new("Sign Out", true, None);
+    let item_quit = MenuItem::new("Quit", true, None);
 
-        let id_show = item_show.id().clone();
-        let id_sign_out = item_sign_out.id().clone();
-        let id_quit = item_quit.id().clone();
+    let id_show = item_show.id().clone();
+    let id_sign_out = item_sign_out.id().clone();
+    let id_quit = item_quit.id().clone();
 
-        let menu = Menu::new();
-        menu.append(&item_show).unwrap();
-        menu.append(&item_sign_out).unwrap();
-        menu.append(&item_quit).unwrap();
+    let menu = Menu::new();
+    menu.append(&item_show).unwrap();
+    menu.append(&item_sign_out).unwrap();
+    menu.append(&item_quit).unwrap();
 
-        let icon = Icon::from_rgba(icon_rgba, width, height).expect("valid icon RGBA data");
+    let icon = Icon::from_rgba(icon_rgba, width, height).expect("valid icon RGBA data");
 
-        let tray_icon = TrayIconBuilder::new()
-            .with_menu(Box::new(menu))
-            .with_tooltip("Spotify Filter")
-            .with_icon(icon)
-            .with_menu_on_left_click(false)
-            .build()
-            .expect("failed to build tray icon");
+    let tray_icon = TrayIconBuilder::new()
+        .with_menu(Box::new(menu))
+        .with_tooltip("Spotify Filter")
+        .with_icon(icon)
+        .with_menu_on_left_click(false)
+        .build()
+        .expect("failed to build tray icon");
 
-        context.tray_icon = Some(tray_icon);
-        (id_show, id_sign_out, id_quit)
+    context.tray_icon = Some(tray_icon);
+    (id_show, id_sign_out, id_quit)
 }
 
 fn setup_hotkeys_manager(context: &mut ApplicationContext, filter_hotkey: &str, pass_hotkey: &str) -> (u32, u32) {
+    info!("Registering hotkeys");
+    debug!(filter_hotkey, pass_hotkey, "Parsing hotkeys from configuration");
     let hotkey_filter = parse_hotkey(filter_hotkey);
     let hotkey_pass = parse_hotkey(pass_hotkey);
 
@@ -149,6 +155,7 @@ fn build_auth_use_cases(
     config: &Configuration,
     notifier: Arc<dyn ErrorNotification>,
 ) -> AuthUseCases {
+    info!("Building auth use-cases and adapters");
     let parsed = url::Url::parse(&config.app.spotify.auth.redirect_uri)
         .unwrap_or_else(|e| panic!("invalid redirect_uri '{}': {e}", config.app.spotify.auth.redirect_uri));
     let addr = format!(
@@ -205,10 +212,17 @@ fn build_auth_use_cases(
 
 fn main() -> Result<(), slint::PlatformError> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::ERROR)
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("info,application=debug,core=debug,infrastructure=debug,gui=debug")),
+        )
+        .with_target(true)
+        .with_thread_ids(true)
         .init();
+    info!("Starting Spotify Filter");
 
     let config = Configuration::load();
+    debug!("Configuration loaded");
     let mut context = ApplicationContext::new();
     let notifier: Arc<dyn ErrorNotification> = Arc::new(ToastErrorNotification::new());
 
@@ -230,7 +244,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
     let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
     let get_settings = Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(&notifier)));
-    let get_playlists = Arc::new(GetPlaylistsInteractor::new(Arc::clone(&api_client)));
+    let get_playlists = Arc::new(GetPlaylistsInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));
     let save_settings = Arc::new(SaveSettingsInteractor::new(cache, file, Arc::clone(&notifier)));
 
     let pass_track = Arc::new(PassTrackInteractor::new(
@@ -251,6 +265,9 @@ fn main() -> Result<(), slint::PlatformError> {
     if initially_authorized {
         authorized.store(true, std::sync::atomic::Ordering::Relaxed);
         notifier.notify("Spotify Filter is ready");
+        info!("Silent sign-in succeeded");
+    } else {
+        warn!("Silent sign-in failed or no refresh token was found");
     }
 
     // Event dispatcher thread
@@ -268,19 +285,31 @@ fn main() -> Result<(), slint::PlatformError> {
         Arc::clone(&auth.try_sign_in) as Arc<dyn TrySignInUseCase>,
         Arc::clone(&auth.token_cache),
     );
-    std::thread::spawn(move || dispatcher.run());
+    std::thread::spawn(move || {
+        info!("Event dispatcher thread started");
+        dispatcher.run();
+        warn!("Event dispatcher thread stopped");
+    });
 
     // Load tray icon
     let (icon_rgba, icon_width, icon_height) = load_icon_rgba();
     let (id_show, id_sign_out, id_quit) = setup_tray_icon(&mut context, icon_rgba, icon_width, icon_height);
     let tray_listener = Arc::new(TrayEventListener::new(id_show, id_sign_out, id_quit));
     tray_listener.start_polling(request_tx.clone());
+    info!("Tray event listener started");
 
     // Setup hotkeys
     let (id_filter, id_pass) = setup_hotkeys_manager(&mut context, &config.hotkeys.filter, &config.hotkeys.pass);
     let hotkey_listener = Arc::new(HotkeyEventListener::new(id_filter, id_pass));
     hotkey_listener.start_polling(request_tx.clone(), authorized);
+    info!("Hotkey event listener started");
 
     // Run GUI event loop
-    gui::starter::run(request_tx, response_rx, initially_authorized, &config.hotkeys.filter, &config.hotkeys.pass)
+    let result = gui::starter::run(request_tx, response_rx, initially_authorized, &config.hotkeys.filter, &config.hotkeys.pass);
+    if let Err(ref e) = result {
+        error!(error = %e, "GUI event loop exited with an error");
+    } else {
+        info!("GUI event loop exited");
+    }
+    result
 }

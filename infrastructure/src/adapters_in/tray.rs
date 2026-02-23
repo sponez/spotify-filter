@@ -1,4 +1,5 @@
 use std::sync::{Arc, mpsc::Sender};
+use tracing::{debug, info};
 
 use domain::ports::ports_in::events::AppRequest;
 use tray_icon::{
@@ -27,6 +28,7 @@ impl TrayEventListener {
     }
 
     pub fn start_polling(self: Arc<Self>, tx: Sender<AppRequest>) {
+        info!("Starting tray polling thread");
         std::thread::spawn(move || loop {
             self.poll(&tx);
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -38,6 +40,7 @@ impl TrayEventListener {
     pub fn poll(&self, tx: &Sender<AppRequest>) {
         while let Ok(event) = TrayIconEvent::receiver().try_recv() {
             if matches!(event, TrayIconEvent::Click { .. }) {
+                debug!("Tray icon clicked");
                 let _ = tx.send(AppRequest::ShowWindow);
             }
         }
@@ -45,10 +48,13 @@ impl TrayEventListener {
         while let Ok(event) = MenuEvent::receiver().try_recv() {
             let id = &event.id;
             if *id == self.id_show {
+                debug!("Tray menu: show");
                 let _ = tx.send(AppRequest::ShowWindow);
             } else if *id == self.id_sign_out {
+                debug!("Tray menu: sign out");
                 let _ = tx.send(AppRequest::SignOut);
             } else if *id == self.id_quit {
+                info!("Tray menu: quit");
                 let _ = tx.send(AppRequest::Quit);
             }
         }

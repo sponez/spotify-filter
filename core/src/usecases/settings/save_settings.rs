@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{error, info};
 
 use crate::{
     errors::errors::AppResult,
@@ -32,15 +33,18 @@ impl SaveSettingsInteractor {
 
 impl SaveSettingsUseCase for SaveSettingsInteractor {
     fn save_settings(&self, command: SaveSettingsCommand) -> AppResult<()> {
+        info!("Saving settings");
         let action = command.filter_action.clone();
         let target = command.filter_target.clone();
 
         self.file.save(&action, &target).map_err(|e| {
+            error!(error = %e, "Failed to persist settings");
             self.notifier.notify(&e.to_string());
             e
         })?;
         self.cache.store(&action, &target);
 
+        info!("Settings saved");
         Ok(())
     }
 }

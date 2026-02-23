@@ -2,6 +2,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use domain::ports::ports_out::repository::token::TokenCache;
+use tracing::{debug, warn};
 
 const REFRESH_THRESHOLD_SECS: u64 = 300; // 5 minutes
 
@@ -33,10 +34,12 @@ impl LocalTokenCache {
 
 impl TokenCache for LocalTokenCache {
     fn load(&self) -> Option<String> {
+        debug!("Loading access token from in-memory cache");
         self.lock_or_reset().as_ref().map(|t| t.access_token.clone())
     }
 
     fn store(&self, access_token: &str, expires_in_secs: u64) {
+        debug!(expires_in_secs, token_len = access_token.len(), "Storing access token in cache");
         let mut g = self.lock_or_reset();
         *g = Some(CachedToken {
             access_token: access_token.to_string(),
@@ -47,15 +50,20 @@ impl TokenCache for LocalTokenCache {
     fn is_expiring_soon(&self) -> bool {
         let g = self.lock_or_reset();
         match g.as_ref() {
-            None => true,
+            None => {
+                debug!("Access token is missing from cache");
+                true
+            }
             Some(t) => {
                 let remaining = t.expires_at.saturating_duration_since(Instant::now());
+                debug!(remaining_secs = remaining.as_secs(), "Checked access token expiration");
                 remaining.as_secs() < REFRESH_THRESHOLD_SECS
             }
         }
     }
 
     fn clear(&self) {
+        warn!("Clearing access token cache");
         let mut g = self.lock_or_reset();
         *g = None;
     }

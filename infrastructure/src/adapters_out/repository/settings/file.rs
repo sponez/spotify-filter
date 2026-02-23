@@ -2,6 +2,7 @@ use domain::ports::{
     ports_in::settings::models::{PassActionView, PassTargetView},
     ports_out::repository::settings::{SettingsStore, SettingsStoreError},
 };
+use tracing::{debug, info};
 
 use crate::adapters_out::repository::settings::{
     dto::settings_dto::SettingsFileDto,
@@ -31,6 +32,7 @@ impl JsonFileSettingsStore {
 impl SettingsStore for JsonFileSettingsStore {
     fn load(&self) -> Result<(PassActionView, PassTargetView), SettingsStoreError> {
         let path = Self::path();
+        info!(path = %path.display(), "Loading settings file");
 
         if path.exists() {
             let content = std::fs::read_to_string(&path)
@@ -39,6 +41,7 @@ impl SettingsStore for JsonFileSettingsStore {
                 .map_err(|e| SettingsStoreError::ParseFailed(e.into()))?;
             Ok(file_dto_to_view(dto))
         } else {
+            debug!("Settings file does not exist, using defaults");
             Ok(Self::default_settings())
         }
     }
@@ -46,6 +49,7 @@ impl SettingsStore for JsonFileSettingsStore {
     fn save(&self, action: &PassActionView, target: &PassTargetView) -> Result<(), SettingsStoreError> {
         let path = Self::path();
         let tmp = path.with_extension("tmp");
+        info!(path = %path.display(), "Saving settings file");
 
         let dto = view_to_file_dto(action, target);
         let content = serde_json::to_string_pretty(&dto)

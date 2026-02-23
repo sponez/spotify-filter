@@ -21,7 +21,7 @@ pub enum AppResponse {
     FilterTrackCompleted(AppResult<()>),
     PassTrackCompleted(AppResult<()>),
     SettingsLoaded(AppResult<SettingsView>),
-    PlaylistsLoaded(Vec<PlaylistItemView>),
+    PlaylistsLoaded(AppResult<Vec<PlaylistItemView>>),
     SettingsSaved(AppResult<()>),
     ShowWindow,
     Quit,

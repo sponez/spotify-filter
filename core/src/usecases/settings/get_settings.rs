@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{error, info};
 
 use crate::{
     errors::errors::AppResult,
@@ -32,11 +33,13 @@ impl GetSettingsInteractor {
 
 impl GetSettingsUseCase for GetSettingsInteractor {
     fn get_settings(&self) -> AppResult<SettingsView> {
+        info!("Loading settings");
         let current_cache = self.cache.load();
         let (filter_action, filter_target) = match current_cache {
             Some(pair) => pair,
             None => {
                 let pair = self.file.load().map_err(|e| {
+                    error!(error = %e, "Failed to load settings from store");
                     self.notifier.notify(&e.to_string());
                     e
                 })?;
@@ -45,6 +48,7 @@ impl GetSettingsUseCase for GetSettingsInteractor {
             }
         };
 
+        info!("Settings loaded");
         Ok(SettingsView { pass_action: filter_action, pass_target: filter_target })
     }
 }
