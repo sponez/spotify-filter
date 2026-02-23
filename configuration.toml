@@ -2,7 +2,12 @@
 url = "https://api.spotify.com/"
 
 [app.spotify.api.paths]
-get-track = "v1/tracks/{id}"
+currently-playing = "v1/me/player/currently-playing"
+playlist = "v1/playlists/{id}"
+my-playlists = "v1/me/playlists"
+library = "v1/me/library"
+playlist-items = "v1/playlists/{id}/items"
+next-track = "v1/me/player/next"
 
 [app.spotify.auth]
 auth_uri = "https://accounts.spotify.com/authorize"
@@ -15,6 +20,8 @@ scopes = [
     "playlist-read-private",
     "playlist-modify-private",
     "playlist-modify-public",
+    "user-library-read",
+    "user-library-modify",
 ]
 
 [hotkeys]

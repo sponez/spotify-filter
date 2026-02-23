@@ -5,7 +5,25 @@ use serde::Deserialize;
 #[derive(Deserialize, Eq, PartialEq, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub enum SpotifyAction {
-    GetTrack,
+    CurrentlyPlaying,
+    Playlist,
+    MyPlaylists,
+    Library,
+    PlaylistItems,
+    NextTrack,
+}
+
+impl SpotifyAction {
+    pub fn to_kebab_str(&self) -> &'static str {
+        match self {
+            Self::CurrentlyPlaying => "currently-playing",
+            Self::Playlist => "playlist",
+            Self::MyPlaylists => "my-playlists",
+            Self::Library => "library",
+            Self::PlaylistItems => "playlist-items",
+            Self::NextTrack => "next-track",
+        }
+    }
 }
 
 #[derive(Deserialize)]

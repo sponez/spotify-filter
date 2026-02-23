@@ -1,11 +1,14 @@
 use thiserror::Error;
 
-use crate::ports::ports_out::{
-    repository::{
-        settings::SettingsStoreError,
-        token::TokenStoreError,
+use crate::{
+    domain::models::spotify_uri::SpotifyUriParseError,
+    ports::ports_out::{
+        repository::{
+            settings::SettingsStoreError,
+            token::TokenStoreError,
+        },
+        server::callback_server::CallbackServerError,
     },
-    server::callback_server::CallbackServerError,
 };
 
 #[derive(Debug, Error)]
@@ -18,6 +21,9 @@ pub enum AppError {
 
     #[error(transparent)]
     TokenStore(#[from] TokenStoreError),
+
+    #[error(transparent)]
+    UriParse(#[from] SpotifyUriParseError),
 
     #[error("Unexpected: {0}")]
     Unexpected(anyhow::Error),

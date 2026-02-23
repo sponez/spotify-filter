@@ -212,8 +212,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let auth = build_auth_use_cases(&config, Arc::clone(&notifier));
 
     // Spotify API client
+    let api_paths = config.app.spotify.api.paths.into_iter()
+        .map(|(k, v)| (k.to_kebab_str().to_string(), v))
+        .collect();
     let api_client: Arc<dyn SpotifyApiClient> = Arc::new(UreqSpotifyApiClient::new(
         config.app.spotify.api.url.clone(),
+        api_paths,
         Arc::clone(&auth.token_cache),
     ));
 
