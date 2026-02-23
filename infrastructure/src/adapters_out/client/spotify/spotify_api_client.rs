@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
 
 use domain::{
     errors::errors::AppResult,
@@ -14,26 +13,18 @@ use domain::{
 use serde::Deserialize;
 use tracing::{debug, error, info, warn};
 
+use crate::adapters_out::client::spotify::{
+    request_scheduler::RequestScheduler,
+    snapshot_cache::SnapshotCache,
+};
+
 pub struct UreqSpotifyApiClient {
     base_url: String,
     paths: HashMap<String, String>,
     token_cache: Arc<dyn TokenCache>,
-    rate_state: Mutex<RateState>,
-    snapshot_cache: Mutex<HashMap<String, CachedSnapshot>>,
+    scheduler: RequestScheduler,
+    snapshots: SnapshotCache,
 }
-
-struct RateState {
-    next_allowed_at: Instant,
-}
-
-struct CachedSnapshot {
-    snapshot_id: String,
-    cached_at: Instant,
-}
-
-const MIN_REQUEST_INTERVAL: Duration = Duration::from_millis(350);
-const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(3);
-const SNAPSHOT_CACHE_TTL: Duration = Duration::from_secs(300);
 
 impl UreqSpotifyApiClient {
     pub fn new(
@@ -45,10 +36,8 @@ impl UreqSpotifyApiClient {
             base_url,
             paths,
             token_cache,
-            rate_state: Mutex::new(RateState {
-                next_allowed_at: Instant::now(),
-            }),
-            snapshot_cache: Mutex::new(HashMap::new()),
+            scheduler: RequestScheduler::new(),
+            snapshots: SnapshotCache::new(),
         }
     }
 
@@ -70,112 +59,11 @@ impl UreqSpotifyApiClient {
         Ok(format!("{}{}", self.base_url, path.replace("{id}", id)))
     }
 
-    fn try_acquire_rate_slot(&self, op_name: &str) -> AppResult<()> {
-        let mut state = match self.rate_state.lock() {
-            Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        let now = Instant::now();
-        if state.next_allowed_at > now {
-            let wait = state.next_allowed_at.saturating_duration_since(now);
-            warn!(
-                operation = op_name,
-                retry_after_secs = wait.as_secs(),
-                "Request blocked by local cooldown"
-            );
-            return Err(anyhow::anyhow!(
-                "Spotify cooldown active for operation '{op_name}', retry in {}s",
-                wait.as_secs()
-            ).into());
-        }
-        state.next_allowed_at = Instant::now() + MIN_REQUEST_INTERVAL;
-        debug!(operation = op_name, "Rate limiter slot acquired");
-        Ok(())
-    }
-
-    fn defer_requests(&self, wait: Duration) {
-        let mut state = match self.rate_state.lock() {
-            Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        state.next_allowed_at = std::cmp::max(state.next_allowed_at, Instant::now() + wait);
-    }
-
-    fn parse_retry_after(resp: &ureq::Response) -> Duration {
-        let secs = resp
-            .header("Retry-After")
-            .and_then(|h| h.trim().parse::<u64>().ok())
-            .unwrap_or(DEFAULT_RETRY_AFTER.as_secs());
-        Duration::from_secs(secs.max(1))
-    }
-
-    fn load_snapshot_from_cache(&self, playlist_id: &str) -> Option<String> {
-        let mut cache = match self.snapshot_cache.lock() {
-            Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        let now = Instant::now();
-        if let Some(entry) = cache.get(playlist_id) {
-            if now.saturating_duration_since(entry.cached_at) < SNAPSHOT_CACHE_TTL {
-                return Some(entry.snapshot_id.clone());
-            }
-        }
-        cache.remove(playlist_id);
-        None
-    }
-
-    fn store_snapshot_in_cache(&self, playlist_id: &str, snapshot_id: &str) {
-        let mut cache = match self.snapshot_cache.lock() {
-            Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        cache.insert(
-            playlist_id.to_string(),
-            CachedSnapshot {
-                snapshot_id: snapshot_id.to_string(),
-                cached_at: Instant::now(),
-            },
-        );
-    }
-
-    fn remove_snapshot_from_cache(&self, playlist_id: &str) {
-        let mut cache = match self.snapshot_cache.lock() {
-            Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        cache.remove(playlist_id);
-    }
-
-    fn request_with_retry<T, F>(&self, op_name: &str, mut op: F) -> AppResult<T>
+    fn schedule<T, F>(&self, op_name: &str, op: F) -> AppResult<T>
     where
         F: FnMut() -> Result<T, ureq::Error>,
     {
-        self.try_acquire_rate_slot(op_name)?;
-        match op() {
-            Ok(value) => Ok(value),
-            Err(ureq::Error::Status(429, response)) => {
-                let wait = Self::parse_retry_after(&response);
-                self.defer_requests(wait);
-                warn!(
-                    operation = op_name,
-                    retry_after_secs = wait.as_secs(),
-                    "Spotify returned 429 Too Many Requests"
-                );
-                Err(anyhow::anyhow!(
-                    "{op_name} rate-limited by Spotify; retry in {}s",
-                    wait.as_secs()
-                ).into())
-            }
-            Err(ureq::Error::Status(status, response)) => {
-                let status_text = response.status_text().to_string();
-                Err(anyhow::anyhow!(
-                    "{op_name} failed with status {status} {status_text}"
-                ).into())
-            }
-            Err(ureq::Error::Transport(e)) => {
-                Err(anyhow::anyhow!("{op_name} transport error: {e}").into())
-            }
-        }
+        self.scheduler.run(op_name, op)
     }
 }
 
@@ -220,7 +108,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         let token = self.token()?;
         let url = self.url("currently-playing")?;
 
-        let response = self.request_with_retry("get currently playing", || {
+        let response = self.schedule("get currently playing", || {
             ureq::get(&url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .call()
@@ -248,7 +136,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
     }
 
     fn get_playlist_snapshot(&self, playlist_id: &str) -> AppResult<PlaylistSnapshotResponse> {
-        if let Some(snapshot_id) = self.load_snapshot_from_cache(playlist_id) {
+        if let Some(snapshot_id) = self.snapshots.get(playlist_id) {
             debug!(playlist_id, "Playlist snapshot cache hit");
             return Ok(PlaylistSnapshotResponse { snapshot_id });
         }
@@ -256,7 +144,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         let token = self.token()?;
         let url = format!("{}?fields=snapshot_id", self.url_with_id("playlist", playlist_id)?);
 
-        let body: SpotifyPlaylistSnapshot = self.request_with_retry("get playlist snapshot", || {
+        let body: SpotifyPlaylistSnapshot = self.schedule("get playlist snapshot", || {
             ureq::get(&url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .call()
@@ -269,7 +157,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
                 error!(error = %e, "Failed to parse playlist snapshot response");
                 anyhow::anyhow!("Failed to parse playlist snapshot response: {e}")
             })?;
-        self.store_snapshot_in_cache(playlist_id, &body.snapshot_id);
+        self.snapshots.put(playlist_id, &body.snapshot_id);
 
         Ok(PlaylistSnapshotResponse {
             snapshot_id: body.snapshot_id,
@@ -285,7 +173,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
 
         loop {
             let url = format!("{base_url}?limit=50&offset={offset}");
-            let page: SpotifyPaginatedPlaylists = self.request_with_retry("get my playlists", || {
+            let page: SpotifyPaginatedPlaylists = self.schedule("get my playlists", || {
                 ureq::get(&url)
                     .set("Authorization", &format!("Bearer {token}"))
                     .call()
@@ -319,7 +207,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         let ids = uris.join(",");
         let url = format!("{}?uris={ids}", self.url("library")?);
 
-        self.request_with_retry("add to library", || {
+        self.schedule("add to library", || {
             ureq::put(&url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .call()
@@ -337,7 +225,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         let ids = uris.join(",");
         let url = format!("{}?uris={ids}", self.url("library")?);
 
-        self.request_with_retry("remove from library", || {
+        self.schedule("remove from library", || {
             ureq::request("DELETE", &url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .call()
@@ -354,7 +242,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         let token = self.token()?;
         let url = self.url_with_id("playlist-items", playlist_id)?;
 
-        self.request_with_retry("add to playlist", || {
+        self.schedule("add to playlist", || {
             ureq::post(&url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .set("Content-Type", "application/json")
@@ -379,7 +267,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
 
         let tracks: Vec<_> = uris.iter().map(|u| ureq::json!({ "uri": u })).collect();
 
-        let response = self.request_with_retry("remove from playlist", || {
+        let response = self.schedule("remove from playlist", || {
             ureq::request("DELETE", &url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .set("Content-Type", "application/json")
@@ -394,7 +282,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
 
         match response.into_json::<SpotifyPlaylistSnapshot>() {
             Ok(body) => {
-                self.store_snapshot_in_cache(playlist_id, &body.snapshot_id);
+                self.snapshots.put(playlist_id, &body.snapshot_id);
                 debug!(playlist_id, "Updated playlist snapshot cache from delete response");
             }
             Err(e) => {
@@ -403,7 +291,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
                     error = %e,
                     "Failed to parse snapshot from delete response, invalidating snapshot cache"
                 );
-                self.remove_snapshot_from_cache(playlist_id);
+                self.snapshots.invalidate(playlist_id);
             }
         }
 
@@ -415,7 +303,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         let token = self.token()?;
         let url = self.url("next-track")?;
 
-        self.request_with_retry("skip to next track", || {
+        self.schedule("skip to next track", || {
             ureq::post(&url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .set("Content-Length", "0")
