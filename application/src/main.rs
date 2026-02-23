@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod configuration;
 mod context;
 mod utils;
@@ -203,7 +205,7 @@ fn build_auth_use_cases(
 
 fn main() -> Result<(), slint::PlatformError> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
+        .with_max_level(tracing::Level::ERROR)
         .init();
 
     let config = Configuration::load();
