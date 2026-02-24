@@ -3,7 +3,6 @@ url = "https://api.spotify.com/"
 
 [app.spotify.api.paths]
 currently-playing = "v1/me/player/currently-playing"
-playlist = "v1/playlists/{id}"
 my-playlists = "v1/me/playlists"
 library = "v1/me/library"
 playlist-items = "v1/playlists/{id}/items"

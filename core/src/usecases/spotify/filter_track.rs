@@ -42,8 +42,7 @@ impl FilterTrackInteractor {
 
     fn filter_playlist_track(&self, playlist_id: &str, track_uri: &str) -> AppResult<()> {
         info!(playlist_id, track_uri, "Filtering track from playlist");
-        let playlist_snapshot = self.api_client.get_playlist_snapshot(playlist_id)?;
-        self.api_client.remove_from_playlist(playlist_id, &[track_uri], &playlist_snapshot.snapshot_id)?;
+        self.api_client.remove_from_playlist(playlist_id, &[track_uri])?;
         self.api_client.skip_to_next()?;
         Ok(())
     }

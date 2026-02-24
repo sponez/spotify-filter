@@ -5,31 +5,30 @@ use domain::{
     errors::errors::AppResult,
     ports::ports_out::{
         client::spotify_api::{
-            CurrentlyPlayingResponse, PlaylistSnapshotResponse, PlaylistSummary, SpotifyApiClient,
+            CurrentlyPlayingResponse, PlaylistSummary, SpotifyApiClient,
         },
         repository::token::TokenCache,
     },
 };
 use serde::Deserialize;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::adapters_out::client::spotify::{
+    action::SpotifyApiAction,
     request_scheduler::RequestScheduler,
-    snapshot_cache::SnapshotCache,
 };
 
 pub struct UreqSpotifyApiClient {
     base_url: String,
-    paths: HashMap<String, String>,
+    paths: HashMap<SpotifyApiAction, String>,
     token_cache: Arc<dyn TokenCache>,
     scheduler: RequestScheduler,
-    snapshots: SnapshotCache,
 }
 
 impl UreqSpotifyApiClient {
     pub fn new(
         base_url: String,
-        paths: HashMap<String, String>,
+        paths: HashMap<SpotifyApiAction, String>,
         token_cache: Arc<dyn TokenCache>,
     ) -> Self {
         Self {
@@ -37,7 +36,6 @@ impl UreqSpotifyApiClient {
             paths,
             token_cache,
             scheduler: RequestScheduler::new(),
-            snapshots: SnapshotCache::new(),
         }
     }
 
@@ -47,15 +45,15 @@ impl UreqSpotifyApiClient {
             .ok_or_else(|| anyhow::anyhow!("No access token available"))?)
     }
 
-    fn url(&self, action: &str) -> AppResult<String> {
-        let path = self.paths.get(action)
-            .ok_or_else(|| anyhow::anyhow!("No path configured for action '{action}'"))?;
+    fn url(&self, action: SpotifyApiAction) -> AppResult<String> {
+        let path = self.paths.get(&action)
+            .ok_or_else(|| anyhow::anyhow!("No path configured for action '{action:?}'"))?;
         Ok(format!("{}{}", self.base_url, path))
     }
 
-    fn url_with_id(&self, action: &str, id: &str) -> AppResult<String> {
-        let path = self.paths.get(action)
-            .ok_or_else(|| anyhow::anyhow!("No path configured for action '{action}'"))?;
+    fn url_with_id(&self, action: SpotifyApiAction, id: &str) -> AppResult<String> {
+        let path = self.paths.get(&action)
+            .ok_or_else(|| anyhow::anyhow!("No path configured for action '{action:?}'"))?;
         Ok(format!("{}{}", self.base_url, path.replace("{id}", id)))
     }
 
@@ -86,11 +84,6 @@ struct SpotifyTrackItem {
 }
 
 #[derive(Deserialize)]
-struct SpotifyPlaylistSnapshot {
-    snapshot_id: String,
-}
-
-#[derive(Deserialize)]
 struct SpotifyPaginatedPlaylists {
     items: Vec<SpotifyPlaylistItem>,
     next: Option<String>,
@@ -106,7 +99,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
     fn get_currently_playing(&self) -> AppResult<Option<CurrentlyPlayingResponse>> {
         info!("Spotify API: get currently playing");
         let token = self.token()?;
-        let url = self.url("currently-playing")?;
+        let url = self.url(SpotifyApiAction::CurrentlyPlaying)?;
 
         let response = self.schedule("get currently playing", || {
             ureq::get(&url)
@@ -135,39 +128,10 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         }))
     }
 
-    fn get_playlist_snapshot(&self, playlist_id: &str) -> AppResult<PlaylistSnapshotResponse> {
-        if let Some(snapshot_id) = self.snapshots.get(playlist_id) {
-            debug!(playlist_id, "Playlist snapshot cache hit");
-            return Ok(PlaylistSnapshotResponse { snapshot_id });
-        }
-        info!(playlist_id, "Spotify API: get playlist snapshot");
-        let token = self.token()?;
-        let url = format!("{}?fields=snapshot_id", self.url_with_id("playlist", playlist_id)?);
-
-        let body: SpotifyPlaylistSnapshot = self.schedule("get playlist snapshot", || {
-            ureq::get(&url)
-                .set("Authorization", &format!("Bearer {token}"))
-                .call()
-        }).map_err(|e| {
-            error!(error = %e, "Failed to get playlist snapshot");
-            e
-        })?
-            .into_json()
-            .map_err(|e| {
-                error!(error = %e, "Failed to parse playlist snapshot response");
-                anyhow::anyhow!("Failed to parse playlist snapshot response: {e}")
-            })?;
-        self.snapshots.put(playlist_id, &body.snapshot_id);
-
-        Ok(PlaylistSnapshotResponse {
-            snapshot_id: body.snapshot_id,
-        })
-    }
-
     fn get_my_playlists(&self) -> AppResult<Vec<PlaylistSummary>> {
         info!("Spotify API: get my playlists");
         let token = self.token()?;
-        let base_url = self.url("my-playlists")?;
+        let base_url = self.url(SpotifyApiAction::MyPlaylists)?;
         let mut all = Vec::new();
         let mut offset = 0u32;
 
@@ -205,7 +169,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         info!(count = uris.len(), "Spotify API: add to library");
         let token = self.token()?;
         let ids = uris.join(",");
-        let url = format!("{}?uris={ids}", self.url("library")?);
+        let url = format!("{}?uris={ids}", self.url(SpotifyApiAction::Library)?);
 
         self.schedule("add to library", || {
             ureq::put(&url)
@@ -223,7 +187,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         info!(count = uris.len(), "Spotify API: remove from library");
         let token = self.token()?;
         let ids = uris.join(",");
-        let url = format!("{}?uris={ids}", self.url("library")?);
+        let url = format!("{}?uris={ids}", self.url(SpotifyApiAction::Library)?);
 
         self.schedule("remove from library", || {
             ureq::request("DELETE", &url)
@@ -240,7 +204,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
     fn add_to_playlist(&self, playlist_id: &str, uris: &[&str]) -> AppResult<()> {
         info!(playlist_id, count = uris.len(), "Spotify API: add to playlist");
         let token = self.token()?;
-        let url = self.url_with_id("playlist-items", playlist_id)?;
+        let url = self.url_with_id(SpotifyApiAction::PlaylistItems, playlist_id)?;
 
         self.schedule("add to playlist", || {
             ureq::post(&url)
@@ -259,11 +223,10 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         &self,
         playlist_id: &str,
         uris: &[&str],
-        snapshot_id: &str,
     ) -> AppResult<()> {
         info!(playlist_id, count = uris.len(), "Spotify API: remove from playlist");
         let token = self.token()?;
-        let url = self.url_with_id("playlist-items", playlist_id)?;
+        let url = self.url_with_id(SpotifyApiAction::PlaylistItems, playlist_id)?;
 
         let tracks: Vec<_> = uris.iter().map(|u| ureq::json!({ "uri": u })).collect();
 
@@ -273,27 +236,16 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
                 .set("Content-Type", "application/json")
                 .send_json(ureq::json!({
                     "items": tracks,
-                    "snapshot_id": snapshot_id,
                 }))
         }).map_err(|e| {
             error!(error = %e, "Failed to remove from playlist");
             e
         })?;
-
-        match response.into_json::<SpotifyPlaylistSnapshot>() {
-            Ok(body) => {
-                self.snapshots.put(playlist_id, &body.snapshot_id);
-                debug!(playlist_id, "Updated playlist snapshot cache from delete response");
-            }
-            Err(e) => {
-                warn!(
-                    playlist_id,
-                    error = %e,
-                    "Failed to parse snapshot from delete response, invalidating snapshot cache"
-                );
-                self.snapshots.invalidate(playlist_id);
-            }
-        }
+        debug!(
+            playlist_id,
+            status = response.status(),
+            "Spotify remove-from-playlist response received"
+        );
 
         Ok(())
     }
@@ -301,7 +253,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
     fn skip_to_next(&self) -> AppResult<()> {
         info!("Spotify API: skip to next");
         let token = self.token()?;
-        let url = self.url("next-track")?;
+        let url = self.url(SpotifyApiAction::NextTrack)?;
 
         self.schedule("skip to next track", || {
             ureq::post(&url)

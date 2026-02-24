@@ -81,8 +81,7 @@ impl PassTrackInteractor {
         }
 
         if context_uri.uri_type == SpotifyUriType::Playlist && *pass_target != PassTargetView::Playlist(context_uri.id.clone()) {
-            let playlist_snapshot = self.api_client.get_playlist_snapshot(&context_uri.id)?;
-            self.api_client.remove_from_playlist(&context_uri.id, &[track_uri], &playlist_snapshot.snapshot_id)?;
+            self.api_client.remove_from_playlist(&context_uri.id, &[track_uri])?;
         }
 
         self.api_client.skip_to_next()?;

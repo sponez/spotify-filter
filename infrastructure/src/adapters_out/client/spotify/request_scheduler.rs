@@ -55,7 +55,13 @@ impl RequestScheduler {
             }
             Err(ureq::Error::Status(status, response)) => {
                 let status_text = response.status_text().to_string();
-                Err(anyhow::anyhow!("{op_name} failed with status {status} {status_text}").into())
+                let body = response
+                    .into_string()
+                    .unwrap_or_else(|_| "<unreadable body>".to_string());
+                Err(anyhow::anyhow!(
+                    "{op_name} failed with status {status} {status_text}; body: {body}"
+                )
+                .into())
             }
             Err(ureq::Error::Transport(e)) => {
                 Err(anyhow::anyhow!("{op_name} transport error: {e}").into())
