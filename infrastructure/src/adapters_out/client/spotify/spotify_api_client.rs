@@ -12,6 +12,7 @@ use domain::{
         repository::token::TokenCache,
     },
 };
+use indexmap::IndexSet;
 use serde::Deserialize;
 use tracing::{debug, error, info};
 
@@ -31,7 +32,7 @@ enum QueueTarget {
     Playlist(String),
 }
 
-type QueueMap = HashMap<QueueTarget, Vec<String>>;
+type QueueMap = HashMap<QueueTarget, IndexSet<String>>;
 
 pub struct UreqSpotifyApiClient {
     base_url: String,
@@ -113,7 +114,7 @@ impl UreqSpotifyApiClient {
         };
         let entry = guard.entry(target).or_default();
         for uri in uris {
-            entry.push((*uri).to_string());
+            entry.insert((*uri).to_string());
         }
     }
 
@@ -134,7 +135,10 @@ impl UreqSpotifyApiClient {
             Err(poisoned) => poisoned.into_inner(),
         };
         for (target, uris) in failed {
-            guard.entry(target).or_default().extend(uris.into_iter());
+            let entry = guard.entry(target).or_default();
+            for uri in uris {
+                entry.insert(uri);
+            }
         }
     }
 
@@ -156,19 +160,20 @@ impl UreqSpotifyApiClient {
         token_cache: &Arc<dyn TokenCache>,
         scheduler: &Arc<RequestScheduler>,
         target: &QueueTarget,
-        uris: &[String],
+        uris: &IndexSet<String>,
     ) -> AppResult<()> {
         if uris.is_empty() {
             return Ok(());
         }
         let token = Self::token_from_cache(token_cache)?;
+        let ordered_uris: Vec<String> = uris.iter().cloned().collect();
         match target {
             QueueTarget::Liked => {
                 let url = format!(
                     "{}{}?uris={}",
                     base_url,
                     Self::path(paths, SpotifyApiAction::Library)?,
-                    uris.join(",")
+                    ordered_uris.join(",")
                 );
                 scheduler.run("cron add to liked", ScheduleMode::Wait, || {
                     ureq::put(&url)
@@ -179,7 +184,7 @@ impl UreqSpotifyApiClient {
             QueueTarget::Playlist(playlist_id) => {
                 let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?.replace("{id}", playlist_id);
                 let url = format!("{base_url}{path}");
-                let payload_uris = uris.to_vec();
+                let payload_uris = ordered_uris.clone();
                 scheduler.run("cron add to playlist", ScheduleMode::Wait, || {
                     ureq::post(&url)
                         .set("Authorization", &format!("Bearer {token}"))
@@ -197,19 +202,20 @@ impl UreqSpotifyApiClient {
         token_cache: &Arc<dyn TokenCache>,
         scheduler: &Arc<RequestScheduler>,
         target: &QueueTarget,
-        uris: &[String],
+        uris: &IndexSet<String>,
     ) -> AppResult<()> {
         if uris.is_empty() {
             return Ok(());
         }
         let token = Self::token_from_cache(token_cache)?;
+        let ordered_uris: Vec<String> = uris.iter().cloned().collect();
         match target {
             QueueTarget::Liked => {
                 let url = format!(
                     "{}{}?uris={}",
                     base_url,
                     Self::path(paths, SpotifyApiAction::Library)?,
-                    uris.join(",")
+                    ordered_uris.join(",")
                 );
                 scheduler.run("cron remove from liked", ScheduleMode::Wait, || {
                     ureq::request("DELETE", &url)
@@ -220,7 +226,7 @@ impl UreqSpotifyApiClient {
             QueueTarget::Playlist(playlist_id) => {
                 let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?.replace("{id}", playlist_id);
                 let url = format!("{base_url}{path}");
-                let tracks: Vec<_> = uris.iter().map(|u| ureq::json!({ "uri": u })).collect();
+                let tracks: Vec<_> = ordered_uris.iter().map(|u| ureq::json!({ "uri": u })).collect();
                 scheduler.run("cron remove from playlist", ScheduleMode::Wait, || {
                     ureq::request("DELETE", &url)
                         .set("Authorization", &format!("Bearer {token}"))
