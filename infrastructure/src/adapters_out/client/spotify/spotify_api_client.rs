@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use domain::{
     errors::errors::AppResult,
@@ -7,6 +8,7 @@ use domain::{
         client::spotify_api::{
             CurrentlyPlayingResponse, PlaylistSummary, SpotifyApiClient,
         },
+        notification::ErrorNotification,
         repository::token::TokenCache,
     },
 };
@@ -15,14 +17,31 @@ use tracing::{debug, error, info};
 
 use crate::adapters_out::client::spotify::{
     action::SpotifyApiAction,
-    request_scheduler::RequestScheduler,
+    request_scheduler::{RequestScheduler, ScheduleMode},
 };
+
+const CRON_INTERVAL: Duration = Duration::from_secs(3600);
+const PHASE_GAP: Duration = Duration::from_secs(35);
+const PLAYLIST_API_INTERVAL: Duration = Duration::from_secs(35);
+const PLAYBACK_API_INTERVAL: Duration = Duration::from_secs(10);
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+enum QueueTarget {
+    Liked,
+    Playlist(String),
+}
+
+type QueueMap = HashMap<QueueTarget, Vec<String>>;
 
 pub struct UreqSpotifyApiClient {
     base_url: String,
     paths: HashMap<SpotifyApiAction, String>,
     token_cache: Arc<dyn TokenCache>,
-    scheduler: RequestScheduler,
+    notifier: Arc<dyn ErrorNotification>,
+    playlist_scheduler: Arc<RequestScheduler>,
+    playback_scheduler: Arc<RequestScheduler>,
+    add_queue: Arc<Mutex<QueueMap>>,
+    remove_queue: Arc<Mutex<QueueMap>>,
 }
 
 impl UreqSpotifyApiClient {
@@ -30,13 +49,35 @@ impl UreqSpotifyApiClient {
         base_url: String,
         paths: HashMap<SpotifyApiAction, String>,
         token_cache: Arc<dyn TokenCache>,
+        notifier: Arc<dyn ErrorNotification>,
     ) -> Self {
-        Self {
+        let playlist_scheduler = Arc::new(RequestScheduler::new(PLAYLIST_API_INTERVAL));
+        let playback_scheduler = Arc::new(RequestScheduler::new(PLAYBACK_API_INTERVAL));
+        let add_queue = Arc::new(Mutex::new(HashMap::new()));
+        let remove_queue = Arc::new(Mutex::new(HashMap::new()));
+
+        let client = Self {
             base_url,
             paths,
             token_cache,
-            scheduler: RequestScheduler::new(),
-        }
+            notifier,
+            playlist_scheduler: Arc::clone(&playlist_scheduler),
+            playback_scheduler: Arc::clone(&playback_scheduler),
+            add_queue: Arc::clone(&add_queue),
+            remove_queue: Arc::clone(&remove_queue),
+        };
+
+        Self::start_cron(
+            client.base_url.clone(),
+            client.paths.clone(),
+            Arc::clone(&client.token_cache),
+            Arc::clone(&client.notifier),
+            playlist_scheduler,
+            add_queue,
+            remove_queue,
+        );
+
+        client
     }
 
     fn token(&self) -> AppResult<String> {
@@ -51,17 +92,210 @@ impl UreqSpotifyApiClient {
         Ok(format!("{}{}", self.base_url, path))
     }
 
-    fn url_with_id(&self, action: SpotifyApiAction, id: &str) -> AppResult<String> {
-        let path = self.paths.get(&action)
-            .ok_or_else(|| anyhow::anyhow!("No path configured for action '{action:?}'"))?;
-        Ok(format!("{}{}", self.base_url, path.replace("{id}", id)))
-    }
-
     fn schedule<T, F>(&self, op_name: &str, op: F) -> AppResult<T>
     where
         F: FnMut() -> Result<T, ureq::Error>,
     {
-        self.scheduler.run(op_name, op)
+        self.playlist_scheduler.run(op_name, ScheduleMode::FailFast, op)
+    }
+
+    fn schedule_playback<T, F>(&self, op_name: &str, op: F) -> AppResult<T>
+    where
+        F: FnMut() -> Result<T, ureq::Error>,
+    {
+        self.playback_scheduler.run(op_name, ScheduleMode::FailFast, op)
+    }
+
+    fn enqueue(queue: &Arc<Mutex<QueueMap>>, target: QueueTarget, uris: &[&str]) {
+        let mut guard = match queue.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let entry = guard.entry(target).or_default();
+        for uri in uris {
+            entry.push((*uri).to_string());
+        }
+    }
+
+    fn drain_queue(queue: &Arc<Mutex<QueueMap>>) -> QueueMap {
+        let mut guard = match queue.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        std::mem::take(&mut *guard)
+    }
+
+    fn merge_back(queue: &Arc<Mutex<QueueMap>>, failed: QueueMap) {
+        if failed.is_empty() {
+            return;
+        }
+        let mut guard = match queue.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        for (target, uris) in failed {
+            guard.entry(target).or_default().extend(uris.into_iter());
+        }
+    }
+
+    fn path(paths: &HashMap<SpotifyApiAction, String>, action: SpotifyApiAction) -> AppResult<String> {
+        paths.get(&action)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("No path configured for action '{action:?}'").into())
+    }
+
+    fn token_from_cache(token_cache: &Arc<dyn TokenCache>) -> AppResult<String> {
+        token_cache
+            .load()
+            .ok_or_else(|| anyhow::anyhow!("No access token available").into())
+    }
+
+    fn run_add_batch(
+        base_url: &str,
+        paths: &HashMap<SpotifyApiAction, String>,
+        token_cache: &Arc<dyn TokenCache>,
+        scheduler: &Arc<RequestScheduler>,
+        target: &QueueTarget,
+        uris: &[String],
+    ) -> AppResult<()> {
+        if uris.is_empty() {
+            return Ok(());
+        }
+        let token = Self::token_from_cache(token_cache)?;
+        match target {
+            QueueTarget::Liked => {
+                let url = format!(
+                    "{}{}?uris={}",
+                    base_url,
+                    Self::path(paths, SpotifyApiAction::Library)?,
+                    uris.join(",")
+                );
+                scheduler.run("cron add to liked", ScheduleMode::Wait, || {
+                    ureq::put(&url)
+                        .set("Authorization", &format!("Bearer {token}"))
+                        .call()
+                })?;
+            }
+            QueueTarget::Playlist(playlist_id) => {
+                let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?.replace("{id}", playlist_id);
+                let url = format!("{base_url}{path}");
+                let payload_uris = uris.to_vec();
+                scheduler.run("cron add to playlist", ScheduleMode::Wait, || {
+                    ureq::post(&url)
+                        .set("Authorization", &format!("Bearer {token}"))
+                        .set("Content-Type", "application/json")
+                        .send_json(ureq::json!({ "uris": payload_uris, "position": 0 }))
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    fn run_remove_batch(
+        base_url: &str,
+        paths: &HashMap<SpotifyApiAction, String>,
+        token_cache: &Arc<dyn TokenCache>,
+        scheduler: &Arc<RequestScheduler>,
+        target: &QueueTarget,
+        uris: &[String],
+    ) -> AppResult<()> {
+        if uris.is_empty() {
+            return Ok(());
+        }
+        let token = Self::token_from_cache(token_cache)?;
+        match target {
+            QueueTarget::Liked => {
+                let url = format!(
+                    "{}{}?uris={}",
+                    base_url,
+                    Self::path(paths, SpotifyApiAction::Library)?,
+                    uris.join(",")
+                );
+                scheduler.run("cron remove from liked", ScheduleMode::Wait, || {
+                    ureq::request("DELETE", &url)
+                        .set("Authorization", &format!("Bearer {token}"))
+                        .call()
+                })?;
+            }
+            QueueTarget::Playlist(playlist_id) => {
+                let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?.replace("{id}", playlist_id);
+                let url = format!("{base_url}{path}");
+                let tracks: Vec<_> = uris.iter().map(|u| ureq::json!({ "uri": u })).collect();
+                scheduler.run("cron remove from playlist", ScheduleMode::Wait, || {
+                    ureq::request("DELETE", &url)
+                        .set("Authorization", &format!("Bearer {token}"))
+                        .set("Content-Type", "application/json")
+                        .send_json(ureq::json!({ "items": tracks }))
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    fn process_queue(
+        base_url: &str,
+        paths: &HashMap<SpotifyApiAction, String>,
+        token_cache: &Arc<dyn TokenCache>,
+        notifier: &Arc<dyn ErrorNotification>,
+        scheduler: &Arc<RequestScheduler>,
+        queue: &Arc<Mutex<QueueMap>>,
+        is_add: bool,
+    ) {
+        let drained = Self::drain_queue(queue);
+        if drained.is_empty() {
+            return;
+        }
+        let mut failed = HashMap::new();
+        for (target, uris) in drained {
+            let result = if is_add {
+                Self::run_add_batch(base_url, paths, token_cache, scheduler, &target, &uris)
+            } else {
+                Self::run_remove_batch(base_url, paths, token_cache, scheduler, &target, &uris)
+            };
+            if let Err(e) = result {
+                error!(error = %e, ?target, "Failed to process playlist queue batch");
+                notifier.notify(&e.to_string());
+                failed.insert(target, uris);
+            }
+        }
+        Self::merge_back(queue, failed);
+    }
+
+    fn start_cron(
+        base_url: String,
+        paths: HashMap<SpotifyApiAction, String>,
+        token_cache: Arc<dyn TokenCache>,
+        notifier: Arc<dyn ErrorNotification>,
+        scheduler: Arc<RequestScheduler>,
+        add_queue: Arc<Mutex<QueueMap>>,
+        remove_queue: Arc<Mutex<QueueMap>>,
+    ) {
+        std::thread::spawn(move || loop {
+            std::thread::sleep(CRON_INTERVAL);
+            notifier.notify("Playlist sync started");
+
+            Self::process_queue(
+                &base_url,
+                &paths,
+                &token_cache,
+                &notifier,
+                &scheduler,
+                &add_queue,
+                true,
+            );
+
+            std::thread::sleep(PHASE_GAP);
+
+            Self::process_queue(
+                &base_url,
+                &paths,
+                &token_cache,
+                &notifier,
+                &scheduler,
+                &remove_queue,
+                false,
+            );
+        });
     }
 }
 
@@ -166,56 +400,20 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
     }
 
     fn add_to_library(&self, uris: &[&str]) -> AppResult<()> {
-        info!(count = uris.len(), "Spotify API: add to library");
-        let token = self.token()?;
-        let ids = uris.join(",");
-        let url = format!("{}?uris={ids}", self.url(SpotifyApiAction::Library)?);
-
-        self.schedule("add to library", || {
-            ureq::put(&url)
-                .set("Authorization", &format!("Bearer {token}"))
-                .call()
-        }).map_err(|e| {
-            error!(error = %e, "Failed to add to library");
-            e
-        })?;
-
+        info!(count = uris.len(), "Queue add to liked songs");
+        Self::enqueue(&self.add_queue, QueueTarget::Liked, uris);
         Ok(())
     }
 
     fn remove_from_library(&self, uris: &[&str]) -> AppResult<()> {
-        info!(count = uris.len(), "Spotify API: remove from library");
-        let token = self.token()?;
-        let ids = uris.join(",");
-        let url = format!("{}?uris={ids}", self.url(SpotifyApiAction::Library)?);
-
-        self.schedule("remove from library", || {
-            ureq::request("DELETE", &url)
-                .set("Authorization", &format!("Bearer {token}"))
-                .call()
-        }).map_err(|e| {
-            error!(error = %e, "Failed to remove from library");
-            e
-        })?;
-
+        info!(count = uris.len(), "Queue remove from liked songs");
+        Self::enqueue(&self.remove_queue, QueueTarget::Liked, uris);
         Ok(())
     }
 
     fn add_to_playlist(&self, playlist_id: &str, uris: &[&str]) -> AppResult<()> {
-        info!(playlist_id, count = uris.len(), "Spotify API: add to playlist");
-        let token = self.token()?;
-        let url = self.url_with_id(SpotifyApiAction::PlaylistItems, playlist_id)?;
-
-        self.schedule("add to playlist", || {
-            ureq::post(&url)
-                .set("Authorization", &format!("Bearer {token}"))
-                .set("Content-Type", "application/json")
-                .send_json(ureq::json!({ "uris": uris, "position": 0 }))
-        }).map_err(|e| {
-            error!(error = %e, "Failed to add to playlist");
-            e
-        })?;
-
+        info!(playlist_id, count = uris.len(), "Queue add to playlist");
+        Self::enqueue(&self.add_queue, QueueTarget::Playlist(playlist_id.to_string()), uris);
         Ok(())
     }
 
@@ -224,29 +422,8 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         playlist_id: &str,
         uris: &[&str],
     ) -> AppResult<()> {
-        info!(playlist_id, count = uris.len(), "Spotify API: remove from playlist");
-        let token = self.token()?;
-        let url = self.url_with_id(SpotifyApiAction::PlaylistItems, playlist_id)?;
-
-        let tracks: Vec<_> = uris.iter().map(|u| ureq::json!({ "uri": u })).collect();
-
-        let response = self.schedule("remove from playlist", || {
-            ureq::request("DELETE", &url)
-                .set("Authorization", &format!("Bearer {token}"))
-                .set("Content-Type", "application/json")
-                .send_json(ureq::json!({
-                    "items": tracks,
-                }))
-        }).map_err(|e| {
-            error!(error = %e, "Failed to remove from playlist");
-            e
-        })?;
-        debug!(
-            playlist_id,
-            status = response.status(),
-            "Spotify remove-from-playlist response received"
-        );
-
+        info!(playlist_id, count = uris.len(), "Queue remove from playlist");
+        Self::enqueue(&self.remove_queue, QueueTarget::Playlist(playlist_id.to_string()), uris);
         Ok(())
     }
 
@@ -255,7 +432,7 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         let token = self.token()?;
         let url = self.url(SpotifyApiAction::NextTrack)?;
 
-        self.schedule("skip to next track", || {
+        self.schedule_playback("skip to next track", || {
             ureq::post(&url)
                 .set("Authorization", &format!("Bearer {token}"))
                 .set("Content-Length", "0")

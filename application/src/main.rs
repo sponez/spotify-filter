@@ -254,6 +254,7 @@ fn main() -> Result<(), slint::PlatformError> {
         config.app.spotify.api.url.clone(),
         api_paths,
         Arc::clone(&auth.token_cache),
+        Arc::clone(&notifier),
     ));
 
     let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));

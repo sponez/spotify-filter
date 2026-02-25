@@ -8,26 +8,31 @@ struct RateState {
     next_allowed_at: Instant,
 }
 
-const MIN_REQUEST_INTERVAL: Duration = Duration::from_millis(350);
 const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(3);
-const LOCAL_AUTOWAIT_THRESHOLD: Duration = Duration::from_secs(1);
+
+pub(crate) enum ScheduleMode {
+    FailFast,
+    Wait,
+}
 
 pub(crate) struct RequestScheduler {
     request_lock: Mutex<()>,
     rate_state: Mutex<RateState>,
+    min_request_interval: Duration,
 }
 
 impl RequestScheduler {
-    pub fn new() -> Self {
+    pub fn new(min_request_interval: Duration) -> Self {
         Self {
             request_lock: Mutex::new(()),
             rate_state: Mutex::new(RateState {
                 next_allowed_at: Instant::now(),
             }),
+            min_request_interval,
         }
     }
 
-    pub fn run<T, F>(&self, op_name: &str, mut op: F) -> AppResult<T>
+    pub fn run<T, F>(&self, op_name: &str, mode: ScheduleMode, mut op: F) -> AppResult<T>
     where
         F: FnMut() -> Result<T, ureq::Error>,
     {
@@ -36,7 +41,7 @@ impl RequestScheduler {
             Err(poisoned) => poisoned.into_inner(),
         };
 
-        self.try_acquire_rate_slot(op_name)?;
+        self.try_acquire_rate_slot(op_name, mode)?;
         match op() {
             Ok(value) => Ok(value),
             Err(ureq::Error::Status(429, response)) => {
@@ -69,7 +74,7 @@ impl RequestScheduler {
         }
     }
 
-    fn try_acquire_rate_slot(&self, op_name: &str) -> AppResult<()> {
+    fn try_acquire_rate_slot(&self, op_name: &str, mode: ScheduleMode) -> AppResult<()> {
         let mut state = match self.rate_state.lock() {
             Ok(g) => g,
             Err(poisoned) => poisoned.into_inner(),
@@ -77,37 +82,36 @@ impl RequestScheduler {
         let now = Instant::now();
         if state.next_allowed_at > now {
             let wait = state.next_allowed_at.saturating_duration_since(now);
-            if wait <= LOCAL_AUTOWAIT_THRESHOLD {
-                debug!(
-                    operation = op_name,
-                    wait_ms = wait.as_millis(),
-                    "Applying short local cooldown delay"
-                );
-                drop(state);
-                std::thread::sleep(wait);
-                let mut state = match self.rate_state.lock() {
-                    Ok(g) => g,
-                    Err(poisoned) => poisoned.into_inner(),
-                };
-                state.next_allowed_at = Instant::now() + MIN_REQUEST_INTERVAL;
-                debug!(operation = op_name, "Rate limiter slot acquired after short wait");
-                return Ok(());
-            }
-
             let retry_after_secs = wait.as_secs().max(1);
-            warn!(
-                operation = op_name,
-                retry_after_secs,
-                retry_after_ms = wait.as_millis(),
-                "Request blocked by local cooldown"
-            );
-            return Err(anyhow::anyhow!(
-                "Spotify cooldown active for operation '{op_name}', retry in {}s",
-                retry_after_secs
-            )
-            .into());
+            match mode {
+                ScheduleMode::FailFast => {
+                    warn!(
+                        operation = op_name,
+                        retry_after_secs,
+                        retry_after_ms = wait.as_millis(),
+                        "Request blocked by local cooldown"
+                    );
+                    return Err(anyhow::anyhow!("Wait {} seconds", retry_after_secs).into());
+                }
+                ScheduleMode::Wait => {
+                    debug!(
+                        operation = op_name,
+                        wait_ms = wait.as_millis(),
+                        "Waiting for scheduler slot"
+                    );
+                    drop(state);
+                    std::thread::sleep(wait);
+                    let mut state = match self.rate_state.lock() {
+                        Ok(g) => g,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    state.next_allowed_at = Instant::now() + self.min_request_interval;
+                    debug!(operation = op_name, "Rate limiter slot acquired after wait");
+                    return Ok(());
+                }
+            }
         }
-        state.next_allowed_at = Instant::now() + MIN_REQUEST_INTERVAL;
+        state.next_allowed_at = Instant::now() + self.min_request_interval;
         debug!(operation = op_name, "Rate limiter slot acquired");
         Ok(())
     }

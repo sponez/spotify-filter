@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error, info};
 
 use crate::{
@@ -17,6 +18,8 @@ pub struct FilterTrackInteractor {
 }
 
 impl FilterTrackInteractor {
+    const POST_QUEUE_DELAY: Duration = Duration::from_secs(1);
+
     pub fn new(
         api_client: Arc<dyn SpotifyApiClient>,
         notifier: Arc<dyn ErrorNotification>,
@@ -43,6 +46,7 @@ impl FilterTrackInteractor {
     fn filter_playlist_track(&self, playlist_id: &str, track_uri: &str) -> AppResult<()> {
         info!(playlist_id, track_uri, "Filtering track from playlist");
         self.api_client.remove_from_playlist(playlist_id, &[track_uri])?;
+        std::thread::sleep(Self::POST_QUEUE_DELAY);
         self.api_client.skip_to_next()?;
         Ok(())
     }
@@ -50,6 +54,7 @@ impl FilterTrackInteractor {
     fn filter_user_collection_track(&self, track_id: &str) -> AppResult<()> {
         info!(track_id, "Filtering track from liked songs");
         self.api_client.remove_from_library(&[track_id])?;
+        std::thread::sleep(Self::POST_QUEUE_DELAY);
         self.api_client.skip_to_next()?;
         Ok(())
     }

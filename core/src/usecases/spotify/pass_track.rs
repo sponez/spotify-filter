@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error, info};
 
 use crate::{
@@ -15,6 +16,8 @@ pub struct PassTrackInteractor {
 }
 
 impl PassTrackInteractor {
+    const POST_QUEUE_DELAY: Duration = Duration::from_secs(1);
+
     pub fn new(
         api_client: Arc<dyn SpotifyApiClient>,
         settings_provider: Arc<dyn GetSettingsUseCase>,
@@ -62,6 +65,7 @@ impl PassTrackInteractor {
                 }
             },
         }
+        std::thread::sleep(Self::POST_QUEUE_DELAY);
         self.api_client.skip_to_next()?;
         Ok(())
     }
@@ -84,6 +88,7 @@ impl PassTrackInteractor {
             self.api_client.remove_from_playlist(&context_uri.id, &[track_uri])?;
         }
 
+        std::thread::sleep(Self::POST_QUEUE_DELAY);
         self.api_client.skip_to_next()?;
         Ok(())
     }
