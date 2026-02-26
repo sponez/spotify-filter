@@ -2771,6 +2771,7 @@ dependencies = [
  "base64",
  "core",
  "global-hotkey",
+ "indexmap",
  "keyring",
  "open",
  "rand 0.8.5",

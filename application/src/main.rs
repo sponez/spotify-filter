@@ -51,6 +51,7 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use configuration::configuration::Configuration;
+use configuration::models::spotify::SpotifyAction;
 use infrastructure::{
     adapters_in::{
         event_dispatcher::EventDispatcher,
@@ -64,6 +65,7 @@ use infrastructure::{
         },
         browser::SystemBrowserLauncher,
         client::spotify::{
+            action::SpotifyApiAction,
             spotify_api_client::UreqSpotifyApiClient,
             spotify_auth_client::UreqSpotifyAuthClient,
         },
@@ -84,6 +86,16 @@ use infrastructure::{
 use tray_icon::{Icon, TrayIconBuilder, menu::{Menu, MenuId, MenuItem}};
 
 use crate::{context::ApplicationContext, utils::hotkey_parser::parse_hotkey};
+
+fn map_spotify_action(action: SpotifyAction) -> SpotifyApiAction {
+    match action {
+        SpotifyAction::CurrentlyPlaying => SpotifyApiAction::CurrentlyPlaying,
+        SpotifyAction::MyPlaylists => SpotifyApiAction::MyPlaylists,
+        SpotifyAction::Library => SpotifyApiAction::Library,
+        SpotifyAction::PlaylistItems => SpotifyApiAction::PlaylistItems,
+        SpotifyAction::NextTrack => SpotifyApiAction::NextTrack,
+    }
+}
 
 fn load_icon_rgba() -> (Vec<u8>, u32, u32) {
     debug!("Loading tray icon from embedded resources");
@@ -230,13 +242,19 @@ fn main() -> Result<(), slint::PlatformError> {
     let auth = build_auth_use_cases(&config, Arc::clone(&notifier));
 
     // Spotify API client
-    let api_paths = config.app.spotify.api.paths.into_iter()
-        .map(|(k, v)| (k.to_kebab_str().to_string(), v))
+    let api_paths = config
+        .app
+        .spotify
+        .api
+        .paths
+        .into_iter()
+        .map(|(k, v)| (map_spotify_action(k), v))
         .collect();
     let api_client: Arc<dyn SpotifyApiClient> = Arc::new(UreqSpotifyApiClient::new(
         config.app.spotify.api.url.clone(),
         api_paths,
         Arc::clone(&auth.token_cache),
+        Arc::clone(&notifier),
     ));
 
     let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));
