@@ -250,12 +250,13 @@ fn main() -> Result<(), slint::PlatformError> {
         .into_iter()
         .map(|(k, v)| (map_spotify_action(k), v))
         .collect();
-    let api_client: Arc<dyn SpotifyApiClient> = Arc::new(UreqSpotifyApiClient::new(
+    let spotify_api_client = Arc::new(UreqSpotifyApiClient::new(
         config.app.spotify.api.url.clone(),
         api_paths,
         Arc::clone(&auth.token_cache),
         Arc::clone(&notifier),
     ));
+    let api_client: Arc<dyn SpotifyApiClient> = spotify_api_client.clone();
 
     let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));
 
@@ -329,5 +330,6 @@ fn main() -> Result<(), slint::PlatformError> {
     } else {
         info!("GUI event loop exited");
     }
+    spotify_api_client.shutdown();
     result
 }
