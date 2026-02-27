@@ -191,10 +191,13 @@ fn build_auth_use_cases(
         config.app.spotify.auth.client_id.clone(),
         config.app.spotify.auth.redirect_uri.clone(),
     ));
-    let token_cache: Arc<dyn TokenCache> = Arc::new(LocalTokenCache::new());
     let refresh_token_store: Arc<dyn RefreshTokenStore> = Arc::new(
         KeyringRefreshTokenStore::new("spotify-filter".into(), "refresh_token".into()),
     );
+    let token_cache: Arc<dyn TokenCache> = Arc::new(LocalTokenCache::with_auto_refresh(
+        Arc::clone(&auth_client),
+        Arc::clone(&refresh_token_store),
+    ));
 
     let sign_in = Arc::new(SignInInteractor::new(
         callback_server,
@@ -301,8 +304,6 @@ fn main() -> Result<(), slint::PlatformError> {
         get_settings,
         get_playlists,
         save_settings,
-        Arc::clone(&auth.try_sign_in) as Arc<dyn TrySignInUseCase>,
-        Arc::clone(&auth.token_cache),
     );
     std::thread::spawn(move || {
         info!("Event dispatcher thread started");

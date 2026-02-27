@@ -17,10 +17,8 @@ use domain::ports::ports_in::{
         pass_track::PassTrackUseCase,
         sign_in::SignInUseCase,
         sign_out::SignOutUseCase,
-        try_sign_in::TrySignInUseCase,
     },
 };
-use domain::ports::ports_out::repository::token::TokenCache;
 
 pub struct EventDispatcher {
     rx: Receiver<AppRequest>,
@@ -33,8 +31,6 @@ pub struct EventDispatcher {
     get_settings: Arc<dyn GetSettingsUseCase>,
     get_playlists: Arc<dyn GetPlaylistsUseCase>,
     save_settings: Arc<dyn SaveSettingsUseCase>,
-    try_sign_in: Arc<dyn TrySignInUseCase>,
-    token_cache: Arc<dyn TokenCache>,
 }
 
 impl EventDispatcher {
@@ -49,8 +45,6 @@ impl EventDispatcher {
         get_settings: Arc<dyn GetSettingsUseCase>,
         get_playlists: Arc<dyn GetPlaylistsUseCase>,
         save_settings: Arc<dyn SaveSettingsUseCase>,
-        try_sign_in: Arc<dyn TrySignInUseCase>,
-        token_cache: Arc<dyn TokenCache>,
     ) -> Self {
         Self {
             rx,
@@ -63,19 +57,6 @@ impl EventDispatcher {
             get_settings,
             get_playlists,
             save_settings,
-            try_sign_in,
-            token_cache,
-        }
-    }
-
-    fn refresh_token_if_needed(&self) {
-        if self.token_cache.is_expiring_soon() {
-            info!("Access token expiring soon, trying refresh");
-            match self.try_sign_in.try_sign_in() {
-                Ok(true) => info!("Token refresh succeeded"),
-                Ok(false) => warn!("Token refresh skipped: no refresh token"),
-                Err(e) => error!(error = %e, "Token refresh failed"),
-            }
         }
     }
 
@@ -116,7 +97,6 @@ impl EventDispatcher {
                     AppResponse::SignOutCompleted(result)
                 }
                 AppRequest::FilterTrack => {
-                    self.refresh_token_if_needed();
                     let result = self.filter_track.filter_current_track();
                     if let Err(ref e) = result {
                         error!(error = %e, "Filter track command failed");
@@ -124,7 +104,6 @@ impl EventDispatcher {
                     AppResponse::FilterTrackCompleted(result)
                 }
                 AppRequest::PassTrack => {
-                    self.refresh_token_if_needed();
                     let result = self.pass_track.pass_current_track();
                     if let Err(ref e) = result {
                         error!(error = %e, "Pass track command failed");
@@ -139,7 +118,6 @@ impl EventDispatcher {
                     AppResponse::SettingsLoaded(result)
                 }
                 AppRequest::GetPlaylists => {
-                    self.refresh_token_if_needed();
                     let result = self.get_playlists.get_playlists();
                     if let Err(ref e) = result {
                         error!(error = %e, "Get playlists command failed");
