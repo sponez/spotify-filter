@@ -37,6 +37,12 @@ impl LocalSettingsCache {
     }
 }
 
+impl Default for LocalSettingsCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SettingsCache for LocalSettingsCache {
     fn load(&self) -> Option<(PassActionView, PassTargetView)> {
         debug!("Loading settings from in-memory cache");

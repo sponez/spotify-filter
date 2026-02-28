@@ -10,6 +10,12 @@ impl ToastErrorNotification {
     }
 }
 
+impl Default for ToastErrorNotification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ErrorNotification for ToastErrorNotification {
     fn notify(&self, message: &str) {
         error!(message, "Showing error notification");

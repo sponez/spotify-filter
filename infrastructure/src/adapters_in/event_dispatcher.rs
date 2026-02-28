@@ -30,30 +30,34 @@ pub struct EventDispatcher {
     save_settings: Arc<dyn SaveSettingsUseCase>,
 }
 
+pub struct EventDispatcherDependencies {
+    pub sign_in: Arc<dyn SignInUseCase>,
+    pub sign_out: Arc<dyn SignOutUseCase>,
+    pub filter_track: Arc<dyn FilterTrackUseCase>,
+    pub pass_track: Arc<dyn PassTrackUseCase>,
+    pub get_settings: Arc<dyn GetSettingsUseCase>,
+    pub get_playlists: Arc<dyn GetPlaylistsUseCase>,
+    pub save_settings: Arc<dyn SaveSettingsUseCase>,
+}
+
 impl EventDispatcher {
     pub fn new(
         rx: Receiver<AppRequest>,
         tx: Sender<AppResponse>,
         authorized: Arc<AtomicBool>,
-        sign_in: Arc<dyn SignInUseCase>,
-        sign_out: Arc<dyn SignOutUseCase>,
-        filter_track: Arc<dyn FilterTrackUseCase>,
-        pass_track: Arc<dyn PassTrackUseCase>,
-        get_settings: Arc<dyn GetSettingsUseCase>,
-        get_playlists: Arc<dyn GetPlaylistsUseCase>,
-        save_settings: Arc<dyn SaveSettingsUseCase>,
+        deps: EventDispatcherDependencies,
     ) -> Self {
         Self {
             rx,
             tx,
             authorized,
-            sign_in,
-            sign_out,
-            filter_track,
-            pass_track,
-            get_settings,
-            get_playlists,
-            save_settings,
+            sign_in: deps.sign_in,
+            sign_out: deps.sign_out,
+            filter_track: deps.filter_track,
+            pass_track: deps.pass_track,
+            get_settings: deps.get_settings,
+            get_playlists: deps.get_playlists,
+            save_settings: deps.save_settings,
         }
     }
 

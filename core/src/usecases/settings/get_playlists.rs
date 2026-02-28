@@ -49,11 +49,11 @@ impl GetPlaylistsUseCase for GetPlaylistsInteractor {
                 Ok(g) => g,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            if let Some(loaded_at) = cache.loaded_at {
-                if now.saturating_duration_since(loaded_at) < Self::CACHE_TTL {
-                    info!(count = cache.items.len(), "Returning playlists from cache");
-                    return Ok(cache.items.clone());
-                }
+            if let Some(loaded_at) = cache.loaded_at
+                && now.saturating_duration_since(loaded_at) < Self::CACHE_TTL
+            {
+                info!(count = cache.items.len(), "Returning playlists from cache");
+                return Ok(cache.items.clone());
             }
         }
 

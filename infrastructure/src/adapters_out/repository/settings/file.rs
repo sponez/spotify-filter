@@ -29,6 +29,12 @@ impl JsonFileSettingsStore {
     }
 }
 
+impl Default for JsonFileSettingsStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SettingsStore for JsonFileSettingsStore {
     fn load(&self) -> Result<(PassActionView, PassTargetView), SettingsStoreError> {
         let path = Self::path();

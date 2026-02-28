@@ -11,7 +11,7 @@ use domain::ports::ports_in::settings::models::{
 use crate::{AppWindow, FilterActionEnum};
 
 thread_local! {
-    static PLAYLISTS: RefCell<Vec<PlaylistItemView>> = RefCell::new(Vec::new());
+    static PLAYLISTS: RefCell<Vec<PlaylistItemView>> = const { RefCell::new(Vec::new()) };
 }
 
 pub fn action_view_to_slint(action: &PassActionView) -> FilterActionEnum {
@@ -63,7 +63,7 @@ pub fn apply_settings_view_to_window(w: &AppWindow, view: SettingsView) {
 }
 
 thread_local! {
-    static SELECTED_TARGET: RefCell<Option<PassTargetView>> = RefCell::new(None);
+    static SELECTED_TARGET: RefCell<Option<PassTargetView>> = const { RefCell::new(None) };
 }
 
 pub fn apply_playlists_to_window(w: &AppWindow, mut playlists: Vec<PlaylistItemView>) {
@@ -116,5 +116,5 @@ pub fn apply_playlists_to_window(w: &AppWindow, mut playlists: Vec<PlaylistItemV
 }
 
 thread_local! {
-    static CAS_TIMER: RefCell<Option<slint::Timer>> = RefCell::new(None);
+    static CAS_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
 }

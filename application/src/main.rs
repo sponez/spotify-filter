@@ -32,13 +32,12 @@ use domain::{
         },
         spotify::{
             filter_track::FilterTrackInteractor, pass_track::PassTrackInteractor,
-            sign_in::SignInInteractor, sign_out::SignOutInteractor,
+            sign_in::{SignInDependencies, SignInInteractor}, sign_out::SignOutInteractor,
             try_sign_in::TrySignInInteractor,
         },
     },
 };
 use global_hotkey::GlobalHotKeyManager;
-use gui;
 use image::GenericImageView;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -47,7 +46,9 @@ use configuration::configuration::Configuration;
 use configuration::models::spotify::SpotifyAction;
 use infrastructure::{
     adapters_in::{
-        event_dispatcher::EventDispatcher, hotkeys::HotkeyEventListener, tray::TrayEventListener,
+        event_dispatcher::{EventDispatcher, EventDispatcherDependencies},
+        hotkeys::HotkeyEventListener,
+        tray::TrayEventListener,
     },
     adapters_out::{
         auth::{pkce::Sha256PkceGenerator, spotify_auth_url::SpotifyAuthUrlBuilder},
@@ -201,16 +202,16 @@ fn build_auth_use_cases(
         Arc::clone(&refresh_token_store),
     ));
 
-    let sign_in = Arc::new(SignInInteractor::new(
+    let sign_in = Arc::new(SignInInteractor::new(SignInDependencies {
         callback_server,
         pkce_generator,
         auth_url_builder,
         browser,
-        Arc::clone(&auth_client),
-        Arc::clone(&token_cache),
-        Arc::clone(&refresh_token_store),
-        Arc::clone(&notifier),
-    ));
+        auth_client: Arc::clone(&auth_client),
+        token_cache: Arc::clone(&token_cache),
+        refresh_token_store: Arc::clone(&refresh_token_store),
+        notifier: Arc::clone(&notifier),
+    }));
 
     let sign_out = Arc::new(SignOutInteractor::new(
         Arc::clone(&token_cache),
@@ -317,13 +318,15 @@ fn main() -> Result<(), slint::PlatformError> {
         request_rx,
         response_tx,
         Arc::clone(&authorized),
-        auth.sign_in,
-        auth.sign_out,
-        filter_track,
-        pass_track,
-        get_settings,
-        get_playlists,
-        save_settings,
+        EventDispatcherDependencies {
+            sign_in: auth.sign_in,
+            sign_out: auth.sign_out,
+            filter_track,
+            pass_track,
+            get_settings,
+            get_playlists,
+            save_settings,
+        },
     );
     std::thread::spawn(move || {
         info!("Event dispatcher thread started");

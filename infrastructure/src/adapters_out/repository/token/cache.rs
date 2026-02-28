@@ -122,14 +122,20 @@ impl LocalTokenCache {
             });
         }
 
-        if tokens.refresh_token != refresh_token {
-            if let Err(e) = deps.refresh_token_store.store(&tokens.refresh_token) {
-                warn!(error = %e, "Failed to persist rotated refresh token after auto-refresh");
-            }
+        if tokens.refresh_token != refresh_token
+            && let Err(e) = deps.refresh_token_store.store(&tokens.refresh_token)
+        {
+            warn!(error = %e, "Failed to persist rotated refresh token after auto-refresh");
         }
 
         info!("Auto-refresh succeeded");
         true
+    }
+}
+
+impl Default for LocalTokenCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

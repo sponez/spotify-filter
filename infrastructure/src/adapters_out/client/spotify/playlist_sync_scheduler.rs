@@ -32,6 +32,16 @@ pub(crate) struct PlaylistSyncScheduler {
     handle: Mutex<Option<JoinHandle<()>>>,
 }
 
+struct CycleContext<'a> {
+    base_url: &'a str,
+    paths: &'a HashMap<SpotifyApiAction, String>,
+    token_cache: &'a Arc<dyn TokenCache>,
+    notifier: &'a Arc<dyn ErrorNotification>,
+    scheduler: &'a Arc<RequestScheduler>,
+    add_queue: &'a Arc<Mutex<QueueMap>>,
+    remove_queue: &'a Arc<Mutex<QueueMap>>,
+}
+
 impl PlaylistSyncScheduler {
     pub(crate) fn start(
         base_url: String,
@@ -48,30 +58,30 @@ impl PlaylistSyncScheduler {
                 match stop_rx.recv_timeout(CRON_INTERVAL) {
                     Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
                         info!("Stopping playlist sync scheduler, flushing queues before exit");
-                        Self::run_cycle(
-                            &base_url,
-                            &paths,
-                            &token_cache,
-                            &notifier,
-                            &scheduler,
-                            &add_queue,
-                            &remove_queue,
-                            None,
-                        );
+                        let ctx = CycleContext {
+                            base_url: &base_url,
+                            paths: &paths,
+                            token_cache: &token_cache,
+                            notifier: &notifier,
+                            scheduler: &scheduler,
+                            add_queue: &add_queue,
+                            remove_queue: &remove_queue,
+                        };
+                        Self::run_cycle(&ctx, None);
                         break;
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {
                         notifier.notify("Playlist sync started");
-                        let stop_requested = Self::run_cycle(
-                            &base_url,
-                            &paths,
-                            &token_cache,
-                            &notifier,
-                            &scheduler,
-                            &add_queue,
-                            &remove_queue,
-                            Some(&stop_rx),
-                        );
+                        let ctx = CycleContext {
+                            base_url: &base_url,
+                            paths: &paths,
+                            token_cache: &token_cache,
+                            notifier: &notifier,
+                            scheduler: &scheduler,
+                            add_queue: &add_queue,
+                            remove_queue: &remove_queue,
+                        };
+                        let stop_requested = Self::run_cycle(&ctx, Some(&stop_rx));
                         if stop_requested {
                             info!(
                                 "Playlist sync scheduler received shutdown signal during phase gap"
@@ -94,30 +104,21 @@ impl PlaylistSyncScheduler {
             let _ = tx.send(());
         }
 
-        if let Some(handle) = self.handle.lock().map(|mut g| g.take()).unwrap_or(None) {
-            if let Err(e) = handle.join() {
-                error!(?e, "Failed to join playlist sync scheduler thread");
-            }
+        if let Some(handle) = self.handle.lock().map(|mut g| g.take()).unwrap_or(None)
+            && let Err(e) = handle.join()
+        {
+            error!(?e, "Failed to join playlist sync scheduler thread");
         }
     }
 
-    fn run_cycle(
-        base_url: &str,
-        paths: &HashMap<SpotifyApiAction, String>,
-        token_cache: &Arc<dyn TokenCache>,
-        notifier: &Arc<dyn ErrorNotification>,
-        scheduler: &Arc<RequestScheduler>,
-        add_queue: &Arc<Mutex<QueueMap>>,
-        remove_queue: &Arc<Mutex<QueueMap>>,
-        stop_rx: Option<&mpsc::Receiver<()>>,
-    ) -> bool {
+    fn run_cycle(ctx: &CycleContext<'_>, stop_rx: Option<&mpsc::Receiver<()>>) -> bool {
         Self::process_queue(
-            base_url,
-            paths,
-            token_cache,
-            notifier,
-            scheduler,
-            add_queue,
+            ctx.base_url,
+            ctx.paths,
+            ctx.token_cache,
+            ctx.notifier,
+            ctx.scheduler,
+            ctx.add_queue,
             true,
         );
 
@@ -125,12 +126,12 @@ impl PlaylistSyncScheduler {
             match stop_rx.recv_timeout(PHASE_GAP) {
                 Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
                     Self::process_queue(
-                        base_url,
-                        paths,
-                        token_cache,
-                        notifier,
-                        scheduler,
-                        remove_queue,
+                        ctx.base_url,
+                        ctx.paths,
+                        ctx.token_cache,
+                        ctx.notifier,
+                        ctx.scheduler,
+                        ctx.remove_queue,
                         false,
                     );
                     return true;
@@ -140,12 +141,12 @@ impl PlaylistSyncScheduler {
         }
 
         Self::process_queue(
-            base_url,
-            paths,
-            token_cache,
-            notifier,
-            scheduler,
-            remove_queue,
+            ctx.base_url,
+            ctx.paths,
+            ctx.token_cache,
+            ctx.notifier,
+            ctx.scheduler,
+            ctx.remove_queue,
             false,
         );
         false

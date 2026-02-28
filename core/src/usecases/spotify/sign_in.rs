@@ -27,26 +27,28 @@ pub struct SignInInteractor {
     notifier: Arc<dyn ErrorNotification>,
 }
 
+pub struct SignInDependencies {
+    pub callback_server: Box<dyn CallbackServer>,
+    pub pkce_generator: Arc<dyn PkceGenerator>,
+    pub auth_url_builder: Arc<dyn AuthUrlBuilder>,
+    pub browser: Arc<dyn BrowserLauncher>,
+    pub auth_client: Arc<dyn SpotifyAuthClient>,
+    pub token_cache: Arc<dyn TokenCache>,
+    pub refresh_token_store: Arc<dyn RefreshTokenStore>,
+    pub notifier: Arc<dyn ErrorNotification>,
+}
+
 impl SignInInteractor {
-    pub fn new(
-        callback_server: Box<dyn CallbackServer>,
-        pkce_generator: Arc<dyn PkceGenerator>,
-        auth_url_builder: Arc<dyn AuthUrlBuilder>,
-        browser: Arc<dyn BrowserLauncher>,
-        auth_client: Arc<dyn SpotifyAuthClient>,
-        token_cache: Arc<dyn TokenCache>,
-        refresh_token_store: Arc<dyn RefreshTokenStore>,
-        notifier: Arc<dyn ErrorNotification>,
-    ) -> Self {
+    pub fn new(deps: SignInDependencies) -> Self {
         Self {
-            callback_server,
-            pkce_generator,
-            auth_url_builder,
-            browser,
-            auth_client,
-            token_cache,
-            refresh_token_store,
-            notifier,
+            callback_server: deps.callback_server,
+            pkce_generator: deps.pkce_generator,
+            auth_url_builder: deps.auth_url_builder,
+            browser: deps.browser,
+            auth_client: deps.auth_client,
+            token_cache: deps.token_cache,
+            refresh_token_store: deps.refresh_token_store,
+            notifier: deps.notifier,
         }
     }
 }
