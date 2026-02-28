@@ -24,5 +24,9 @@ pub trait SettingsCache: Send + Sync {
 /// Persist / restore settings from durable storage (file, registry, …).
 pub trait SettingsStore: Send + Sync {
     fn load(&self) -> Result<(PassActionView, PassTargetView), SettingsStoreError>;
-    fn save(&self, action: &PassActionView, target: &PassTargetView) -> Result<(), SettingsStoreError>;
+    fn save(
+        &self,
+        action: &PassActionView,
+        target: &PassTargetView,
+    ) -> Result<(), SettingsStoreError>;
 }

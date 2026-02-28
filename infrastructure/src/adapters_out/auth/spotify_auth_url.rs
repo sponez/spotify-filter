@@ -16,15 +16,19 @@ impl SpotifyAuthUrlBuilder {
         redirect_uri: String,
         scopes: Vec<String>,
     ) -> Self {
-        Self { auth_uri, client_id, redirect_uri, scopes }
+        Self {
+            auth_uri,
+            client_id,
+            redirect_uri,
+            scopes,
+        }
     }
 }
 
 impl AuthUrlBuilder for SpotifyAuthUrlBuilder {
     fn build_authorize_url(&self, code_challenge: &str, state: &str) -> String {
         debug!("Building Spotify authorization URL");
-        let mut url = Url::parse(&self.auth_uri)
-            .expect("invalid auth_uri in configuration");
+        let mut url = Url::parse(&self.auth_uri).expect("invalid auth_uri in configuration");
 
         url.query_pairs_mut()
             .append_pair("client_id", &self.client_id)

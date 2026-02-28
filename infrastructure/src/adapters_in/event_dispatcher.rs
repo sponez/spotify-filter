@@ -8,14 +8,11 @@ use tracing::{debug, error, info, warn};
 use domain::ports::ports_in::{
     events::{AppRequest, AppResponse},
     settings::usecases::{
-        get_playlists::GetPlaylistsUseCase,
-        get_settings::GetSettingsUseCase,
+        get_playlists::GetPlaylistsUseCase, get_settings::GetSettingsUseCase,
         save_settings::SaveSettingsUseCase,
     },
     spotify::usecases::{
-        filter_track::FilterTrackUseCase,
-        pass_track::PassTrackUseCase,
-        sign_in::SignInUseCase,
+        filter_track::FilterTrackUseCase, pass_track::PassTrackUseCase, sign_in::SignInUseCase,
         sign_out::SignOutUseCase,
     },
 };

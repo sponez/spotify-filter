@@ -3,10 +3,7 @@ use thiserror::Error;
 use crate::{
     domain::models::spotify_uri::SpotifyUriParseError,
     ports::ports_out::{
-        repository::{
-            settings::SettingsStoreError,
-            token::TokenStoreError,
-        },
+        repository::{settings::SettingsStoreError, token::TokenStoreError},
         server::callback_server::CallbackServerError,
     },
 };

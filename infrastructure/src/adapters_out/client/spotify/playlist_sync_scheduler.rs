@@ -73,7 +73,9 @@ impl PlaylistSyncScheduler {
                             Some(&stop_rx),
                         );
                         if stop_requested {
-                            info!("Playlist sync scheduler received shutdown signal during phase gap");
+                            info!(
+                                "Playlist sync scheduler received shutdown signal during phase gap"
+                            );
                             break;
                         }
                     }
@@ -88,12 +90,7 @@ impl PlaylistSyncScheduler {
     }
 
     pub(crate) fn shutdown(&self) {
-        if let Some(tx) = self
-            .stop_tx
-            .lock()
-            .map(|mut g| g.take())
-            .unwrap_or(None)
-        {
+        if let Some(tx) = self.stop_tx.lock().map(|mut g| g.take()).unwrap_or(None) {
             let _ = tx.send(());
         }
 
@@ -235,7 +232,8 @@ impl PlaylistSyncScheduler {
                 })?;
             }
             QueueTarget::Playlist(playlist_id) => {
-                let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?.replace("{id}", playlist_id);
+                let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?
+                    .replace("{id}", playlist_id);
                 let url = format!("{base_url}{path}");
                 let payload_uris = ordered_uris.clone();
                 scheduler.run("cron add to playlist", ScheduleMode::Wait, || {
@@ -277,9 +275,13 @@ impl PlaylistSyncScheduler {
                 })?;
             }
             QueueTarget::Playlist(playlist_id) => {
-                let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?.replace("{id}", playlist_id);
+                let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?
+                    .replace("{id}", playlist_id);
                 let url = format!("{base_url}{path}");
-                let tracks: Vec<_> = ordered_uris.iter().map(|u| ureq::json!({ "uri": u })).collect();
+                let tracks: Vec<_> = ordered_uris
+                    .iter()
+                    .map(|u| ureq::json!({ "uri": u }))
+                    .collect();
                 scheduler.run("cron remove from playlist", ScheduleMode::Wait, || {
                     ureq::request("DELETE", &url)
                         .set("Authorization", &format!("Bearer {token}"))
@@ -291,8 +293,12 @@ impl PlaylistSyncScheduler {
         Ok(())
     }
 
-    fn path(paths: &HashMap<SpotifyApiAction, String>, action: SpotifyApiAction) -> AppResult<String> {
-        paths.get(&action)
+    fn path(
+        paths: &HashMap<SpotifyApiAction, String>,
+        action: SpotifyApiAction,
+    ) -> AppResult<String> {
+        paths
+            .get(&action)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("No path configured for action '{action:?}'").into())
     }

@@ -142,7 +142,10 @@ impl TokenCache for LocalTokenCache {
         }
 
         if self.try_refresh() {
-            return self.lock_or_reset().as_ref().map(|t| t.access_token.clone());
+            return self
+                .lock_or_reset()
+                .as_ref()
+                .map(|t| t.access_token.clone());
         }
 
         if Self::is_expired_token(&cached) {
@@ -157,7 +160,11 @@ impl TokenCache for LocalTokenCache {
     }
 
     fn store(&self, access_token: &str, expires_in_secs: u64) {
-        debug!(expires_in_secs, token_len = access_token.len(), "Storing access token in cache");
+        debug!(
+            expires_in_secs,
+            token_len = access_token.len(),
+            "Storing access token in cache"
+        );
         let mut g = self.lock_or_reset();
         *g = Some(CachedToken {
             access_token: access_token.to_string(),
@@ -174,7 +181,10 @@ impl TokenCache for LocalTokenCache {
             }
             Some(t) => {
                 let remaining = t.expires_at.saturating_duration_since(Instant::now());
-                debug!(remaining_secs = remaining.as_secs(), "Checked access token expiration");
+                debug!(
+                    remaining_secs = remaining.as_secs(),
+                    "Checked access token expiration"
+                );
                 remaining.as_secs() < REFRESH_THRESHOLD_SECS
             }
         }

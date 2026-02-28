@@ -3,13 +3,18 @@ use std::time::Duration;
 use tracing::{debug, error, info};
 
 use crate::{
-    domain::{models::spotify_uri::{SpotifyUriType, SpotifyUserSubpath}, uri_parser::parse_spotify_uri}, errors::errors::AppResult, ports::{
+    domain::{
+        models::spotify_uri::{SpotifyUriType, SpotifyUserSubpath},
+        uri_parser::parse_spotify_uri,
+    },
+    errors::errors::AppResult,
+    ports::{
         ports_in::spotify::usecases::filter_track::FilterTrackUseCase,
         ports_out::{
             client::spotify_api::{CurrentlyPlayingResponse, SpotifyApiClient},
             notification::ErrorNotification,
         },
-    }
+    },
 };
 
 pub struct FilterTrackInteractor {
@@ -24,7 +29,10 @@ impl FilterTrackInteractor {
         api_client: Arc<dyn SpotifyApiClient>,
         notifier: Arc<dyn ErrorNotification>,
     ) -> Self {
-        Self { api_client, notifier }
+        Self {
+            api_client,
+            notifier,
+        }
     }
 
     fn filter_track(&self, track: CurrentlyPlayingResponse) -> AppResult<()> {
@@ -35,8 +43,9 @@ impl FilterTrackInteractor {
             if context_uri.uri_type == SpotifyUriType::Playlist {
                 self.filter_playlist_track(&context_uri.id, &track.track_uri)?;
             }
-            if (context_uri.uri_type == SpotifyUriType::User) &&
-                (context_uri.user_subpath == Some(SpotifyUserSubpath::Collection)) {
+            if (context_uri.uri_type == SpotifyUriType::User)
+                && (context_uri.user_subpath == Some(SpotifyUserSubpath::Collection))
+            {
                 self.filter_user_collection_track(&track.track_uri)?;
             }
         }
@@ -45,7 +54,8 @@ impl FilterTrackInteractor {
 
     fn filter_playlist_track(&self, playlist_id: &str, track_uri: &str) -> AppResult<()> {
         info!(playlist_id, track_uri, "Filtering track from playlist");
-        self.api_client.remove_from_playlist(playlist_id, &[track_uri])?;
+        self.api_client
+            .remove_from_playlist(playlist_id, &[track_uri])?;
         std::thread::sleep(Self::POST_QUEUE_DELAY);
         self.api_client.skip_to_next()?;
         Ok(())

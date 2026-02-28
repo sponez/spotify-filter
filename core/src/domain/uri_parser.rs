@@ -1,5 +1,7 @@
 use crate::{
-    domain::models::spotify_uri::{SpotifyUri, SpotifyUriParseError, SpotifyUriType, SpotifyUserSubpath},
+    domain::models::spotify_uri::{
+        SpotifyUri, SpotifyUriParseError, SpotifyUriType, SpotifyUserSubpath,
+    },
     errors::errors::AppResult,
 };
 
@@ -69,7 +71,10 @@ mod tests {
         let uri = parse_spotify_uri("spotify:user:12345:collection").unwrap();
         assert!(matches!(uri.uri_type, SpotifyUriType::User));
         assert_eq!(uri.id, "12345");
-        assert!(matches!(uri.user_subpath, Some(SpotifyUserSubpath::Collection)));
+        assert!(matches!(
+            uri.user_subpath,
+            Some(SpotifyUserSubpath::Collection)
+        ));
     }
 
     #[test]

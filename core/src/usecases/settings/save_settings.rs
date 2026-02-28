@@ -5,8 +5,7 @@ use crate::{
     errors::errors::AppResult,
     ports::{
         ports_in::settings::{
-            models::SaveSettingsCommand,
-            usecases::save_settings::SaveSettingsUseCase,
+            models::SaveSettingsCommand, usecases::save_settings::SaveSettingsUseCase,
         },
         ports_out::{
             notification::ErrorNotification,
@@ -27,7 +26,11 @@ impl SaveSettingsInteractor {
         file: Arc<dyn SettingsStore>,
         notifier: Arc<dyn ErrorNotification>,
     ) -> Self {
-        Self { cache, file, notifier }
+        Self {
+            cache,
+            file,
+            notifier,
+        }
     }
 }
 

@@ -132,4 +132,3 @@ impl RequestScheduler {
         Duration::from_secs(secs.max(1))
     }
 }
-

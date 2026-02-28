@@ -13,7 +13,11 @@ pub struct UreqSpotifyAuthClient {
 
 impl UreqSpotifyAuthClient {
     pub fn new(token_uri: String, client_id: String, redirect_uri: String) -> Self {
-        Self { token_uri, client_id, redirect_uri }
+        Self {
+            token_uri,
+            client_id,
+            redirect_uri,
+        }
     }
 }
 
@@ -79,7 +83,9 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
 
         Ok(TokenResponse {
             access_token: resp.access_token,
-            refresh_token: resp.refresh_token.unwrap_or_else(|| refresh_token.to_string()),
+            refresh_token: resp
+                .refresh_token
+                .unwrap_or_else(|| refresh_token.to_string()),
             expires_in: resp.expires_in,
         })
     }

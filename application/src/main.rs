@@ -4,11 +4,7 @@ mod configuration;
 mod context;
 mod utils;
 
-use std::sync::{
-    Arc,
-    atomic::AtomicBool,
-    mpsc,
-};
+use std::sync::{Arc, atomic::AtomicBool, mpsc};
 
 use domain::{
     ports::{
@@ -31,15 +27,12 @@ use domain::{
     },
     usecases::{
         settings::{
-            get_playlists::GetPlaylistsInteractor,
-            get_settings::GetSettingsInteractor,
+            get_playlists::GetPlaylistsInteractor, get_settings::GetSettingsInteractor,
             save_settings::SaveSettingsInteractor,
         },
         spotify::{
-            filter_track::FilterTrackInteractor,
-            pass_track::PassTrackInteractor,
-            sign_in::SignInInteractor,
-            sign_out::SignOutInteractor,
+            filter_track::FilterTrackInteractor, pass_track::PassTrackInteractor,
+            sign_in::SignInInteractor, sign_out::SignOutInteractor,
             try_sign_in::TrySignInInteractor,
         },
     },
@@ -54,36 +47,27 @@ use configuration::configuration::Configuration;
 use configuration::models::spotify::SpotifyAction;
 use infrastructure::{
     adapters_in::{
-        event_dispatcher::EventDispatcher,
-        hotkeys::HotkeyEventListener,
-        tray::TrayEventListener,
+        event_dispatcher::EventDispatcher, hotkeys::HotkeyEventListener, tray::TrayEventListener,
     },
     adapters_out::{
-        auth::{
-            pkce::Sha256PkceGenerator,
-            spotify_auth_url::SpotifyAuthUrlBuilder,
-        },
+        auth::{pkce::Sha256PkceGenerator, spotify_auth_url::SpotifyAuthUrlBuilder},
         browser::SystemBrowserLauncher,
         client::spotify::{
-            action::SpotifyApiAction,
-            spotify_api_client::UreqSpotifyApiClient,
+            action::SpotifyApiAction, spotify_api_client::UreqSpotifyApiClient,
             spotify_auth_client::UreqSpotifyAuthClient,
         },
         notification::ToastErrorNotification,
         repository::{
-            settings::{
-                cache::LocalSettingsCache,
-                file::JsonFileSettingsStore,
-            },
-            token::{
-                cache::LocalTokenCache,
-                keyring::KeyringRefreshTokenStore,
-            },
+            settings::{cache::LocalSettingsCache, file::JsonFileSettingsStore},
+            token::{cache::LocalTokenCache, keyring::KeyringRefreshTokenStore},
         },
         server::callback_server::TinyHttpCallbackServer,
     },
 };
-use tray_icon::{Icon, TrayIconBuilder, menu::{Menu, MenuId, MenuItem}};
+use tray_icon::{
+    Icon, TrayIconBuilder,
+    menu::{Menu, MenuId, MenuItem},
+};
 
 use crate::{context::ApplicationContext, utils::hotkey_parser::parse_hotkey};
 
@@ -106,7 +90,12 @@ fn load_icon_rgba() -> (Vec<u8>, u32, u32) {
     (rgba, width, height)
 }
 
-fn setup_tray_icon(context: &mut ApplicationContext, icon_rgba: Vec<u8>, width: u32, height: u32) -> (MenuId, MenuId, MenuId) {
+fn setup_tray_icon(
+    context: &mut ApplicationContext,
+    icon_rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> (MenuId, MenuId, MenuId) {
     info!("Setting up tray icon");
     let item_show = MenuItem::new("Show", true, None);
     let item_sign_out = MenuItem::new("Sign Out", true, None);
@@ -135,9 +124,16 @@ fn setup_tray_icon(context: &mut ApplicationContext, icon_rgba: Vec<u8>, width: 
     (id_show, id_sign_out, id_quit)
 }
 
-fn setup_hotkeys_manager(context: &mut ApplicationContext, filter_hotkey: &str, pass_hotkey: &str) -> (u32, u32) {
+fn setup_hotkeys_manager(
+    context: &mut ApplicationContext,
+    filter_hotkey: &str,
+    pass_hotkey: &str,
+) -> (u32, u32) {
     info!("Registering hotkeys");
-    debug!(filter_hotkey, pass_hotkey, "Parsing hotkeys from configuration");
+    debug!(
+        filter_hotkey,
+        pass_hotkey, "Parsing hotkeys from configuration"
+    );
     let hotkey_filter = parse_hotkey(filter_hotkey);
     let hotkey_pass = parse_hotkey(pass_hotkey);
 
@@ -168,8 +164,12 @@ fn build_auth_use_cases(
     notifier: Arc<dyn ErrorNotification>,
 ) -> AuthUseCases {
     info!("Building auth use-cases and adapters");
-    let parsed = url::Url::parse(&config.app.spotify.auth.redirect_uri)
-        .unwrap_or_else(|e| panic!("invalid redirect_uri '{}': {e}", config.app.spotify.auth.redirect_uri));
+    let parsed = url::Url::parse(&config.app.spotify.auth.redirect_uri).unwrap_or_else(|e| {
+        panic!(
+            "invalid redirect_uri '{}': {e}",
+            config.app.spotify.auth.redirect_uri
+        )
+    });
     let addr = format!(
         "{}:{}",
         parsed.host_str().expect("redirect_uri must have a host"),
@@ -177,7 +177,8 @@ fn build_auth_use_cases(
     );
     let path = parsed.path().to_string();
 
-    let callback_server: Box<dyn CallbackServer> = Box::new(TinyHttpCallbackServer::new(addr, path));
+    let callback_server: Box<dyn CallbackServer> =
+        Box::new(TinyHttpCallbackServer::new(addr, path));
     let pkce_generator: Arc<dyn PkceGenerator> = Arc::new(Sha256PkceGenerator);
     let auth_url_builder: Arc<dyn AuthUrlBuilder> = Arc::new(SpotifyAuthUrlBuilder::new(
         config.app.spotify.auth.auth_uri.clone(),
@@ -191,9 +192,10 @@ fn build_auth_use_cases(
         config.app.spotify.auth.client_id.clone(),
         config.app.spotify.auth.redirect_uri.clone(),
     ));
-    let refresh_token_store: Arc<dyn RefreshTokenStore> = Arc::new(
-        KeyringRefreshTokenStore::new("spotify-filter".into(), "refresh_token".into()),
-    );
+    let refresh_token_store: Arc<dyn RefreshTokenStore> = Arc::new(KeyringRefreshTokenStore::new(
+        "spotify-filter".into(),
+        "refresh_token".into(),
+    ));
     let token_cache: Arc<dyn TokenCache> = Arc::new(LocalTokenCache::with_auto_refresh(
         Arc::clone(&auth_client),
         Arc::clone(&refresh_token_store),
@@ -222,15 +224,19 @@ fn build_auth_use_cases(
         refresh_token_store,
     ));
 
-    AuthUseCases { sign_in, sign_out, try_sign_in, token_cache }
+    AuthUseCases {
+        sign_in,
+        sign_out,
+        try_sign_in,
+        token_cache,
+    }
 }
 
 fn main() -> Result<(), slint::PlatformError> {
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info,application=debug,core=debug,infrastructure=debug,gui=debug")),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            EnvFilter::new("info,application=debug,core=debug,infrastructure=debug,gui=debug")
+        }))
         .with_target(true)
         .with_thread_ids(true)
         .init();
@@ -261,13 +267,27 @@ fn main() -> Result<(), slint::PlatformError> {
     ));
     let api_client: Arc<dyn SpotifyApiClient> = spotify_api_client.clone();
 
-    let filter_track = Arc::new(FilterTrackInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));
+    let filter_track = Arc::new(FilterTrackInteractor::new(
+        Arc::clone(&api_client),
+        Arc::clone(&notifier),
+    ));
 
     let cache: Arc<dyn SettingsCache> = Arc::new(LocalSettingsCache::new());
     let file: Arc<dyn SettingsStore> = Arc::new(JsonFileSettingsStore::new());
-    let get_settings = Arc::new(GetSettingsInteractor::new(Arc::clone(&cache), Arc::clone(&file), Arc::clone(&notifier)));
-    let get_playlists = Arc::new(GetPlaylistsInteractor::new(Arc::clone(&api_client), Arc::clone(&notifier)));
-    let save_settings = Arc::new(SaveSettingsInteractor::new(cache, file, Arc::clone(&notifier)));
+    let get_settings = Arc::new(GetSettingsInteractor::new(
+        Arc::clone(&cache),
+        Arc::clone(&file),
+        Arc::clone(&notifier),
+    ));
+    let get_playlists = Arc::new(GetPlaylistsInteractor::new(
+        Arc::clone(&api_client),
+        Arc::clone(&notifier),
+    ));
+    let save_settings = Arc::new(SaveSettingsInteractor::new(
+        cache,
+        file,
+        Arc::clone(&notifier),
+    ));
 
     let pass_track = Arc::new(PassTrackInteractor::new(
         Arc::clone(&api_client),
@@ -313,19 +333,27 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Load tray icon
     let (icon_rgba, icon_width, icon_height) = load_icon_rgba();
-    let (id_show, id_sign_out, id_quit) = setup_tray_icon(&mut context, icon_rgba, icon_width, icon_height);
+    let (id_show, id_sign_out, id_quit) =
+        setup_tray_icon(&mut context, icon_rgba, icon_width, icon_height);
     let tray_listener = Arc::new(TrayEventListener::new(id_show, id_sign_out, id_quit));
     tray_listener.start_polling(request_tx.clone());
     info!("Tray event listener started");
 
     // Setup hotkeys
-    let (id_filter, id_pass) = setup_hotkeys_manager(&mut context, &config.hotkeys.filter, &config.hotkeys.pass);
+    let (id_filter, id_pass) =
+        setup_hotkeys_manager(&mut context, &config.hotkeys.filter, &config.hotkeys.pass);
     let hotkey_listener = Arc::new(HotkeyEventListener::new(id_filter, id_pass));
     hotkey_listener.start_polling(request_tx.clone(), authorized);
     info!("Hotkey event listener started");
 
     // Run GUI event loop
-    let result = gui::starter::run(request_tx, response_rx, initially_authorized, &config.hotkeys.filter, &config.hotkeys.pass);
+    let result = gui::starter::run(
+        request_tx,
+        response_rx,
+        initially_authorized,
+        &config.hotkeys.filter,
+        &config.hotkeys.pass,
+    );
     if let Err(ref e) = result {
         error!(error = %e, "GUI event loop exited with an error");
     } else {

@@ -18,7 +18,9 @@ pub struct LocalSettingsCache {
 
 impl LocalSettingsCache {
     pub fn new() -> Self {
-        Self { inner: Mutex::new(None) }
+        Self {
+            inner: Mutex::new(None),
+        }
     }
 
     fn lock_or_reset(&self) -> MutexGuard<'_, Option<SettingsCacheDto>> {

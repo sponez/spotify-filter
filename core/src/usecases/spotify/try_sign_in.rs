@@ -24,7 +24,11 @@ impl TrySignInInteractor {
         token_cache: Arc<dyn TokenCache>,
         refresh_token_store: Arc<dyn RefreshTokenStore>,
     ) -> Self {
-        Self { auth_client, token_cache, refresh_token_store }
+        Self {
+            auth_client,
+            token_cache,
+            refresh_token_store,
+        }
     }
 }
 
@@ -36,11 +40,15 @@ impl TrySignInUseCase for TrySignInInteractor {
             return Ok(false);
         };
 
-        let tokens = self.auth_client.refresh_token(&refresh_token).map_err(|e| {
-            error!(error = %e, "Silent sign-in token refresh failed");
-            e
-        })?;
-        self.token_cache.store(&tokens.access_token, tokens.expires_in);
+        let tokens = self
+            .auth_client
+            .refresh_token(&refresh_token)
+            .map_err(|e| {
+                error!(error = %e, "Silent sign-in token refresh failed");
+                e
+            })?;
+        self.token_cache
+            .store(&tokens.access_token, tokens.expires_in);
         if tokens.refresh_token != refresh_token {
             self.refresh_token_store.store(&tokens.refresh_token)?;
         }

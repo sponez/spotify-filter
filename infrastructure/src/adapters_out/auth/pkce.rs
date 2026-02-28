@@ -12,12 +12,17 @@ impl PkceGenerator for Sha256PkceGenerator {
         let verifier = generate_random_string(128, PKCE_CHARSET);
         let challenge = generate_challenge(&verifier);
         let state = generate_random_string(32, ALPHANUMERIC_CHARSET);
-        PkceChallenge { verifier, challenge, state }
+        PkceChallenge {
+            verifier,
+            challenge,
+            state,
+        }
     }
 }
 
 const PKCE_CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-const ALPHANUMERIC_CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const ALPHANUMERIC_CHARSET: &[u8] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 fn generate_random_string(len: usize, charset: &[u8]) -> String {
     let mut rng = rand::thread_rng();

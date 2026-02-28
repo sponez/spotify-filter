@@ -6,10 +6,7 @@ use crate::{
     ports::{
         ports_in::spotify::usecases::sign_in::SignInUseCase,
         ports_out::{
-            auth::{
-                auth_url_builder::AuthUrlBuilder,
-                pkce::PkceGenerator,
-            },
+            auth::{auth_url_builder::AuthUrlBuilder, pkce::PkceGenerator},
             browser::BrowserLauncher,
             client::spotify_auth::SpotifyAuthClient,
             notification::ErrorNotification,
@@ -64,7 +61,9 @@ impl SignInUseCase for SignInInteractor {
         })?;
 
         let pkce = self.pkce_generator.generate();
-        let url = self.auth_url_builder.build_authorize_url(&pkce.challenge, &pkce.state);
+        let url = self
+            .auth_url_builder
+            .build_authorize_url(&pkce.challenge, &pkce.state);
         info!("Opening browser for Spotify authorization");
 
         self.browser.open_url(&url).map_err(|e| {
@@ -88,20 +87,26 @@ impl SignInUseCase for SignInInteractor {
         }
 
         info!("Exchanging authorization code for tokens");
-        let tokens = self.auth_client.exchange_code(&response.code, &pkce.verifier).map_err(|e| {
-            error!(error = %e, "Token exchange failed");
-            self.notifier.notify(&e.to_string());
-            e
-        })?;
+        let tokens = self
+            .auth_client
+            .exchange_code(&response.code, &pkce.verifier)
+            .map_err(|e| {
+                error!(error = %e, "Token exchange failed");
+                self.notifier.notify(&e.to_string());
+                e
+            })?;
 
         info!("Token exchange succeeded");
 
-        self.token_cache.store(&tokens.access_token, tokens.expires_in);
-        self.refresh_token_store.store(&tokens.refresh_token).map_err(|e| {
-            error!(error = %e, "Failed to persist refresh token");
-            self.notifier.notify(&e.to_string());
-            e
-        })?;
+        self.token_cache
+            .store(&tokens.access_token, tokens.expires_in);
+        self.refresh_token_store
+            .store(&tokens.refresh_token)
+            .map_err(|e| {
+                error!(error = %e, "Failed to persist refresh token");
+                self.notifier.notify(&e.to_string());
+                e
+            })?;
 
         info!("Sign-in completed");
         Ok(())
