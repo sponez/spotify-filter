@@ -8,6 +8,7 @@ use domain::{
     ports::ports_out::{notification::ErrorNotification, repository::token::TokenCache},
 };
 use indexmap::IndexSet;
+use serde_json::json;
 use tracing::{error, info};
 
 use crate::adapters_out::client::spotify::{
@@ -41,6 +42,8 @@ struct CycleContext<'a> {
     add_queue: &'a Arc<Mutex<QueueMap>>,
     remove_queue: &'a Arc<Mutex<QueueMap>>,
 }
+
+type DeferredRemovals = HashMap<QueueTarget, IndexSet<String>>;
 
 impl PlaylistSyncScheduler {
     pub(crate) fn start(
@@ -112,7 +115,7 @@ impl PlaylistSyncScheduler {
     }
 
     fn run_cycle(ctx: &CycleContext<'_>, stop_rx: Option<&mpsc::Receiver<()>>) -> bool {
-        Self::process_queue(
+        let deferred_removals = Self::process_queue(
             ctx.base_url,
             ctx.paths,
             ctx.token_cache,
@@ -120,6 +123,7 @@ impl PlaylistSyncScheduler {
             ctx.scheduler,
             ctx.add_queue,
             true,
+            HashMap::new(),
         );
 
         if let Some(stop_rx) = stop_rx {
@@ -133,6 +137,7 @@ impl PlaylistSyncScheduler {
                         ctx.scheduler,
                         ctx.remove_queue,
                         false,
+                        deferred_removals,
                     );
                     return true;
                 }
@@ -148,6 +153,7 @@ impl PlaylistSyncScheduler {
             ctx.scheduler,
             ctx.remove_queue,
             false,
+            deferred_removals,
         );
         false
     }
@@ -184,13 +190,28 @@ impl PlaylistSyncScheduler {
         scheduler: &Arc<RequestScheduler>,
         queue: &Arc<Mutex<QueueMap>>,
         is_add: bool,
-    ) {
-        let drained = Self::drain_queue(queue);
+        deferred_removals: DeferredRemovals,
+    ) -> DeferredRemovals {
+        let mut drained = Self::drain_queue(queue);
         if drained.is_empty() {
-            return;
+            return deferred_removals;
         }
+
+        if !is_add && !deferred_removals.is_empty() {
+            for uris in drained.values_mut() {
+                for blocked_uris in deferred_removals.values() {
+                    uris.retain(|uri| !blocked_uris.contains(uri));
+                }
+            }
+            Self::merge_back(queue, deferred_removals.clone());
+        }
+
         let mut failed = HashMap::new();
+        let mut failed_adds = deferred_removals;
         for (target, uris) in drained {
+            if uris.is_empty() {
+                continue;
+            }
             let result = if is_add {
                 Self::run_add_batch(base_url, paths, token_cache, scheduler, &target, &uris)
             } else {
@@ -199,10 +220,14 @@ impl PlaylistSyncScheduler {
             if let Err(e) = result {
                 error!(error = %e, ?target, "Failed to process playlist queue batch");
                 notifier.notify(&e.to_string());
+                if is_add {
+                    failed_adds.insert(target.clone(), uris.clone());
+                }
                 failed.insert(target, uris);
             }
         }
         Self::merge_back(queue, failed);
+        failed_adds
     }
 
     fn run_add_batch(
@@ -228,8 +253,8 @@ impl PlaylistSyncScheduler {
                 );
                 scheduler.run("cron add to liked", ScheduleMode::Wait, || {
                     ureq::put(&url)
-                        .set("Authorization", &format!("Bearer {token}"))
-                        .call()
+                        .header("Authorization", &format!("Bearer {token}"))
+                        .send_empty()
                 })?;
             }
             QueueTarget::Playlist(playlist_id) => {
@@ -239,9 +264,9 @@ impl PlaylistSyncScheduler {
                 let payload_uris = ordered_uris.clone();
                 scheduler.run("cron add to playlist", ScheduleMode::Wait, || {
                     ureq::post(&url)
-                        .set("Authorization", &format!("Bearer {token}"))
-                        .set("Content-Type", "application/json")
-                        .send_json(ureq::json!({ "uris": payload_uris, "position": 0 }))
+                        .header("Authorization", &format!("Bearer {token}"))
+                        .header("Content-Type", "application/json")
+                        .send_json(json!({ "uris": payload_uris, "position": 0 }))
                 })?;
             }
         }
@@ -270,8 +295,8 @@ impl PlaylistSyncScheduler {
                     ordered_uris.join(",")
                 );
                 scheduler.run("cron remove from liked", ScheduleMode::Wait, || {
-                    ureq::request("DELETE", &url)
-                        .set("Authorization", &format!("Bearer {token}"))
+                    ureq::delete(&url)
+                        .header("Authorization", &format!("Bearer {token}"))
                         .call()
                 })?;
             }
@@ -281,13 +306,14 @@ impl PlaylistSyncScheduler {
                 let url = format!("{base_url}{path}");
                 let tracks: Vec<_> = ordered_uris
                     .iter()
-                    .map(|u| ureq::json!({ "uri": u }))
+                    .map(|u| json!({ "uri": u }))
                     .collect();
                 scheduler.run("cron remove from playlist", ScheduleMode::Wait, || {
-                    ureq::request("DELETE", &url)
-                        .set("Authorization", &format!("Bearer {token}"))
-                        .set("Content-Type", "application/json")
-                        .send_json(ureq::json!({ "items": tracks }))
+                    ureq::delete(&url)
+                        .force_send_body()
+                        .header("Authorization", &format!("Bearer {token}"))
+                        .header("Content-Type", "application/json")
+                        .send_json(json!({ "items": tracks }))
                 })?;
             }
         }

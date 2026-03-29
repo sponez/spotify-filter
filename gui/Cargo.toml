@@ -6,8 +6,8 @@ build = "build.rs"
 
 [dependencies]
 domain = { path = "../core", package = "core" }
-slint = "1.15"
-tracing = "0.1.44"
+slint.workspace = true
+tracing.workspace = true
 
 [build-dependencies]
-slint-build = "1.15"
+slint-build.workspace = true

@@ -76,26 +76,26 @@ impl PassTrackInteractor {
         pass_target: &PassTargetView,
         track_uri: &str,
     ) -> AppResult<()> {
-        match pass_target {
-            PassTargetView::LikedSongs => {
-                if !context_uri.is_collection() {
-                    self.api_client.add_to_library(&[track_uri])?;
-                }
-            }
-            PassTargetView::Playlist(playlist_id) => {
-                if context_uri.uri_type != SpotifyUriType::Playlist
-                    || context_uri.id != *playlist_id
-                {
-                    self.api_client.add_to_playlist(playlist_id, &[track_uri])?;
-                }
-            }
-        }
+        self.add_to_target(context_uri, pass_target, track_uri)?;
         std::thread::sleep(Self::POST_QUEUE_DELAY);
         self.api_client.skip_to_next()?;
         Ok(())
     }
 
     fn move_to_playlist(
+        &self,
+        context_uri: &SpotifyUri,
+        pass_target: &PassTargetView,
+        track_uri: &str,
+    ) -> AppResult<()> {
+        self.add_to_target(context_uri, pass_target, track_uri)?;
+        self.remove_from_source(context_uri, pass_target, track_uri)?;
+        std::thread::sleep(Self::POST_QUEUE_DELAY);
+        self.api_client.skip_to_next()?;
+        Ok(())
+    }
+
+    fn add_to_target(
         &self,
         context_uri: &SpotifyUri,
         pass_target: &PassTargetView,
@@ -115,16 +115,29 @@ impl PassTrackInteractor {
                 }
             }
         }
+        Ok(())
+    }
 
-        if context_uri.uri_type == SpotifyUriType::Playlist
-            && *pass_target != PassTargetView::Playlist(context_uri.id.clone())
-        {
-            self.api_client
-                .remove_from_playlist(&context_uri.id, &[track_uri])?;
+    fn remove_from_source(
+        &self,
+        context_uri: &SpotifyUri,
+        pass_target: &PassTargetView,
+        track_uri: &str,
+    ) -> AppResult<()> {
+        match context_uri.uri_type {
+            SpotifyUriType::Playlist => {
+                if *pass_target != PassTargetView::Playlist(context_uri.id.clone()) {
+                    self.api_client
+                        .remove_from_playlist(&context_uri.id, &[track_uri])?;
+                }
+            }
+            SpotifyUriType::User if context_uri.is_collection() => {
+                if *pass_target != PassTargetView::LikedSongs {
+                    self.api_client.remove_from_library(&[track_uri])?;
+                }
+            }
+            _ => {}
         }
-
-        std::thread::sleep(Self::POST_QUEUE_DELAY);
-        self.api_client.skip_to_next()?;
         Ok(())
     }
 }

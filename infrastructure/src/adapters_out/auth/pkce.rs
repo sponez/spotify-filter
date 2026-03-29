@@ -1,6 +1,5 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use domain::ports::ports_out::auth::pkce::{PkceChallenge, PkceGenerator};
-use rand::Rng;
 use sha2::{Digest, Sha256};
 use tracing::debug;
 
@@ -25,10 +24,9 @@ const ALPHANUMERIC_CHARSET: &[u8] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 fn generate_random_string(len: usize, charset: &[u8]) -> String {
-    let mut rng = rand::thread_rng();
     (0..len)
         .map(|_| {
-            let idx = rng.gen_range(0..charset.len());
+            let idx = rand::random_range(0..charset.len());
             charset[idx] as char
         })
         .collect()

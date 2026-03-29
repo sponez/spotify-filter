@@ -3,5 +3,58 @@ members = ["application", "core", "infrastructure", "gui"]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
+
+[workspace.dependencies]
+anyhow = { version = "1.0", default-features = false, features = ["std"] }
+base64 = { version = "0.22", default-features = false, features = ["std"] }
+dotenvy = { version = "0.15", default-features = false }
+global-hotkey = { version = "0.7", default-features = false }
+image = { version = "0.25", default-features = false, features = ["png"] }
+indexmap = { version = "2", default-features = false, features = ["std"] }
+keyring = { version = "3", default-features = false, features = [
+    "windows-native",
+] }
+open = { version = "5", default-features = false }
+rand = { version = "0.10", default-features = false, features = [
+    "std",
+    "std_rng",
+    "thread_rng",
+] }
+serde = { version = "1", default-features = false, features = [
+    "derive",
+    "std",
+] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+sha2 = { version = "0.11" }
+slint = { version = "1.15", default-features = false, features = [
+    "std",
+    "backend-winit",
+    "renderer-software",
+    "compat-1-2",
+] }
+slint-build = { version = "1.15" }
+thiserror = { version = "2", default-features = false }
+tiny_http = { version = "0.12", default-features = false }
+toml = { version = "1.1.0", default-features = false, features = [
+    "parse",
+    "serde",
+] }
+tracing = { version = "0.1.44", default-features = false, features = [
+    "std",
+    "attributes",
+] }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "env-filter",
+    "fmt",
+] }
+tray-icon = { version = "0.21", default-features = false }
+ureq = { version = "3", default-features = false, features = [
+    "json",
+    "gzip",
+    "rustls",
+] }
+url = { version = "2", default-features = false }
+winres = { version = "0.1", default-features = false }
+winrt-notification = { version = "0.5", default-features = false }

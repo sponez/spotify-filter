@@ -84,18 +84,22 @@ impl UreqSpotifyApiClient {
 
     fn schedule<T, F>(&self, op_name: &str, op: F) -> AppResult<T>
     where
-        F: FnMut() -> Result<T, ureq::Error>,
+        F: FnMut() -> Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+        T: serde::de::DeserializeOwned,
     {
-        self.playlist_scheduler
-            .run(op_name, ScheduleMode::FailFast, op)
+        let mut response = self
+            .playlist_scheduler
+            .run(op_name, ScheduleMode::FailFast, op)?;
+        response.body_mut().read_json().map_err(|e| anyhow::anyhow!("{e}").into())
     }
 
-    fn schedule_playback<T, F>(&self, op_name: &str, op: F) -> AppResult<T>
+    fn schedule_playback<F>(&self, op_name: &str, op: F) -> AppResult<()>
     where
-        F: FnMut() -> Result<T, ureq::Error>,
+        F: FnMut() -> Result<ureq::http::Response<ureq::Body>, ureq::Error>,
     {
         self.playback_scheduler
             .run(op_name, ScheduleMode::FailFast, op)
+            .map(|_| ())
     }
 
     pub fn shutdown(&self) {
@@ -150,10 +154,11 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
         let token = self.token()?;
         let url = self.url(SpotifyApiAction::CurrentlyPlaying)?;
 
-        let response = self
-            .schedule("get currently playing", || {
+        let mut response = self
+            .playlist_scheduler
+            .run("get currently playing", ScheduleMode::FailFast, || {
                 ureq::get(&url)
-                    .set("Authorization", &format!("Bearer {token}"))
+                    .header("Authorization", &format!("Bearer {token}"))
                     .call()
             })
             .map_err(|e| {
@@ -161,12 +166,12 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
                 e
             })?;
 
-        if response.status() == 204 {
+        if response.status().as_u16() == 204 {
             debug!("Spotify API: currently playing returned 204");
             return Ok(None);
         }
 
-        let body: SpotifyCurrentlyPlaying = response.into_json().map_err(|e| {
+        let body: SpotifyCurrentlyPlaying = response.body_mut().read_json().map_err(|e| {
             error!(error = %e, "Failed to parse currently playing response");
             anyhow::anyhow!("Failed to parse currently playing response: {e}")
         })?;
@@ -189,17 +194,12 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
             let page: SpotifyPaginatedPlaylists = self
                 .schedule("get my playlists", || {
                     ureq::get(&url)
-                        .set("Authorization", &format!("Bearer {token}"))
+                        .header("Authorization", &format!("Bearer {token}"))
                         .call()
                 })
                 .map_err(|e| {
                     error!(error = %e, "Failed to get playlists");
                     e
-                })?
-                .into_json()
-                .map_err(|e| {
-                    error!(error = %e, "Failed to parse playlists response");
-                    anyhow::anyhow!("Failed to parse playlists response: {e}")
                 })?;
 
             all.extend(page.items.into_iter().map(|p| PlaylistSummary {
@@ -259,9 +259,9 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
 
         self.schedule_playback("skip to next track", || {
             ureq::post(&url)
-                .set("Authorization", &format!("Bearer {token}"))
-                .set("Content-Length", "0")
-                .call()
+                .header("Authorization", &format!("Bearer {token}"))
+                .header("Content-Length", "0")
+                .send_empty()
         })
         .map_err(|e| {
             error!(error = %e, "Failed to skip to next track");
