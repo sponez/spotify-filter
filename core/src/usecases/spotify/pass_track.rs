@@ -301,7 +301,10 @@ mod tests {
         assert!(state.added_to_playlist.is_empty());
         assert!(state.removed_from_playlist.is_empty());
         assert_eq!(state.skipped, 1);
-        assert_eq!(state.notifications, vec!["Local track is ignored".to_string()]);
+        assert_eq!(
+            state.notifications,
+            vec!["Local track is ignored".to_string()]
+        );
     }
 }
 
