@@ -242,7 +242,9 @@ impl PlaylistSyncScheduler {
             return Ok(());
         }
         let token = Self::token_from_cache(token_cache)?;
-        let ordered_uris: Vec<String> = uris.iter().cloned().collect();
+        // Spotify inserts batch additions effectively "from the front", so reverse the
+        // queued order to preserve the user's original action order in the final list.
+        let ordered_uris: Vec<String> = uris.iter().rev().cloned().collect();
         match target {
             QueueTarget::Liked => {
                 let url = format!(
