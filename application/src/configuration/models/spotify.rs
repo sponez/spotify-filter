@@ -8,7 +8,6 @@ pub enum SpotifyAction {
     CurrentlyPlaying,
     MyPlaylists,
     Library,
-    Playlist,
     PlaylistItems,
     NextTrack,
 }

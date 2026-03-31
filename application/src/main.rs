@@ -79,7 +79,6 @@ fn map_spotify_action(action: SpotifyAction) -> SpotifyApiAction {
         SpotifyAction::CurrentlyPlaying => SpotifyApiAction::CurrentlyPlaying,
         SpotifyAction::MyPlaylists => SpotifyApiAction::MyPlaylists,
         SpotifyAction::Library => SpotifyApiAction::Library,
-        SpotifyAction::Playlist => SpotifyApiAction::Playlist,
         SpotifyAction::PlaylistItems => SpotifyApiAction::PlaylistItems,
         SpotifyAction::NextTrack => SpotifyApiAction::NextTrack,
     }

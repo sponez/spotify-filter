@@ -57,29 +57,8 @@ impl FilterTrackInteractor {
     }
 
     fn filter_local_track(&self, track: CurrentlyPlayingResponse) -> AppResult<()> {
-        if let Some(context_uri_str) = track.context_uri {
-            debug!(
-                context_uri = %context_uri_str,
-                track_uri = %track.track_uri,
-                "Filtering local track by context"
-            );
-            let context_uri = parse_spotify_uri(&context_uri_str)?;
-            if context_uri.uri_type == SpotifyUriType::Playlist {
-                info!(
-                    playlist_id = %context_uri.id,
-                    track_uri = %track.track_uri,
-                    "Filtering local track from playlist"
-                );
-                self.api_client
-                    .remove_local_from_playlist(&context_uri.id, &track.track_uri)?;
-                std::thread::sleep(Self::POST_QUEUE_DELAY);
-                self.api_client.skip_to_next()?;
-                return Ok(());
-            }
-        }
-
-        self.notifier
-            .notify("Local track is not in a playlist, skipping only");
+        debug!(track_uri = %track.track_uri, "Ignoring local track");
+        self.notifier.notify("Local track is ignored");
         self.api_client.skip_to_next()?;
         Ok(())
     }
@@ -118,7 +97,6 @@ mod tests {
     #[derive(Default)]
     struct TestState {
         removed_from_playlist: Vec<(String, Vec<String>)>,
-        removed_local_from_playlist: Vec<(String, String)>,
         removed_from_library: Vec<Vec<String>>,
         skipped: usize,
         notifications: Vec<String>,
@@ -162,19 +140,6 @@ mod tests {
             Ok(())
         }
 
-        fn remove_local_from_playlist(
-            &self,
-            playlist_id: &str,
-            local_track_uri: &str,
-        ) -> AppResult<()> {
-            self.state
-                .lock()
-                .unwrap()
-                .removed_local_from_playlist
-                .push((playlist_id.to_string(), local_track_uri.to_string()));
-            Ok(())
-        }
-
         fn skip_to_next(&self) -> AppResult<()> {
             self.state.lock().unwrap().skipped += 1;
             Ok(())
@@ -196,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn filters_local_playlist_track_via_dedicated_api() {
+    fn local_playlist_track_is_ignored_with_notification() {
         let state = Arc::new(Mutex::new(TestState::default()));
         let interactor = FilterTrackInteractor::new(
             Arc::new(TestSpotifyApiClient {
@@ -216,15 +181,10 @@ mod tests {
             .unwrap();
 
         let state = state.lock().unwrap();
-        assert_eq!(
-            state.removed_local_from_playlist,
-            vec![(
-                "playlist123".to_string(),
-                "spotify:local:artist:album:track:123".to_string()
-            )]
-        );
         assert!(state.removed_from_playlist.is_empty());
+        assert!(state.removed_from_library.is_empty());
         assert_eq!(state.skipped, 1);
+        assert_eq!(state.notifications, vec!["Local track is ignored".to_string()]);
     }
 
     #[test]
@@ -248,12 +208,10 @@ mod tests {
             .unwrap();
 
         let state = state.lock().unwrap();
-        assert!(state.removed_local_from_playlist.is_empty());
+        assert!(state.removed_from_playlist.is_empty());
+        assert!(state.removed_from_library.is_empty());
         assert_eq!(state.skipped, 1);
-        assert_eq!(
-            state.notifications,
-            vec!["Local track is not in a playlist, skipping only".to_string()]
-        );
+        assert_eq!(state.notifications, vec!["Local track is ignored".to_string()]);
     }
 }
 

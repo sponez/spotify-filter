@@ -78,11 +78,11 @@ impl PassTrackInteractor {
         match action {
             PassActionView::None => {
                 info!("Pass action for local track: skip only");
+                self.notifier.notify("Local track is ignored");
             }
             PassActionView::AddToPlaylist | PassActionView::MoveToPlaylist => {
                 info!("Pass action for local track is not supported by Spotify Web API");
-                self.notifier
-                    .notify("Local tracks cannot be moved or saved via Spotify Web API");
+                self.notifier.notify("Local track is ignored");
             }
         }
         self.api_client.skip_to_next()?;
@@ -188,7 +188,6 @@ mod tests {
         removed_from_library: Vec<Vec<String>>,
         added_to_playlist: Vec<(String, Vec<String>)>,
         removed_from_playlist: Vec<(String, Vec<String>)>,
-        removed_local_from_playlist: Vec<(String, String)>,
         skipped: usize,
         notifications: Vec<String>,
     }
@@ -237,19 +236,6 @@ mod tests {
                 playlist_id.to_string(),
                 uris.iter().map(|uri| (*uri).to_string()).collect(),
             ));
-            Ok(())
-        }
-
-        fn remove_local_from_playlist(
-            &self,
-            playlist_id: &str,
-            local_track_uri: &str,
-        ) -> AppResult<()> {
-            self.state
-                .lock()
-                .unwrap()
-                .removed_local_from_playlist
-                .push((playlist_id.to_string(), local_track_uri.to_string()));
             Ok(())
         }
 
@@ -314,12 +300,8 @@ mod tests {
         assert!(state.removed_from_library.is_empty());
         assert!(state.added_to_playlist.is_empty());
         assert!(state.removed_from_playlist.is_empty());
-        assert!(state.removed_local_from_playlist.is_empty());
         assert_eq!(state.skipped, 1);
-        assert_eq!(
-            state.notifications,
-            vec!["Local tracks cannot be moved or saved via Spotify Web API".to_string()]
-        );
+        assert_eq!(state.notifications, vec!["Local track is ignored".to_string()]);
     }
 }
 

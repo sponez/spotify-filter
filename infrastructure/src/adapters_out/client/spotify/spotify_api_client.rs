@@ -11,7 +11,6 @@ use domain::{
     },
 };
 use serde::Deserialize;
-use serde_json::json;
 use tracing::{debug, error, info};
 
 use crate::adapters_out::client::spotify::{
@@ -106,29 +105,6 @@ impl UreqSpotifyApiClient {
             .map(|_| ())
     }
 
-    fn schedule_playlist_wait<T, F>(&self, op_name: &str, op: F) -> AppResult<T>
-    where
-        F: FnMut() -> Result<ureq::http::Response<ureq::Body>, ureq::Error>,
-        T: serde::de::DeserializeOwned,
-    {
-        let mut response = self
-            .playlist_scheduler
-            .run(op_name, ScheduleMode::Wait, op)?;
-        response
-            .body_mut()
-            .read_json()
-            .map_err(|e| anyhow::anyhow!("{e}").into())
-    }
-
-    fn schedule_playlist_wait_empty<F>(&self, op_name: &str, op: F) -> AppResult<()>
-    where
-        F: FnMut() -> Result<ureq::http::Response<ureq::Body>, ureq::Error>,
-    {
-        self.playlist_scheduler
-            .run(op_name, ScheduleMode::Wait, op)
-            .map(|_| ())
-    }
-
     pub fn shutdown(&self) {
         self.playlist_sync_scheduler.shutdown();
     }
@@ -175,30 +151,6 @@ struct SpotifyPaginatedPlaylists {
 struct SpotifyPlaylistItem {
     id: String,
     name: String,
-}
-
-#[derive(Deserialize)]
-struct SpotifyPlaylistDetails {
-    snapshot_id: String,
-    tracks: SpotifyPlaylistTracksPage,
-}
-
-#[derive(Deserialize)]
-struct SpotifyPlaylistTracksPage {
-    items: Vec<SpotifyPlaylistTrackItem>,
-    next: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct SpotifyPlaylistTrackItem {
-    #[serde(default)]
-    is_local: bool,
-    track: Option<SpotifyPlaylistTrack>,
-}
-
-#[derive(Deserialize)]
-struct SpotifyPlaylistTrack {
-    uri: Option<String>,
 }
 
 impl SpotifyApiClient for UreqSpotifyApiClient {
@@ -303,81 +255,6 @@ impl SpotifyApiClient for UreqSpotifyApiClient {
             QueueTarget::Playlist(playlist_id.to_string()),
             uris,
         );
-        Ok(())
-    }
-
-    fn remove_local_from_playlist(
-        &self,
-        playlist_id: &str,
-        local_track_uri: &str,
-    ) -> AppResult<()> {
-        info!(
-            playlist_id,
-            local_track_uri, "Remove local track from playlist"
-        );
-        let token = self.token()?;
-        let base_url = self
-            .url(SpotifyApiAction::Playlist)?
-            .replace("{id}", playlist_id);
-        let mut snapshot_id = None;
-        let mut position = None;
-        let mut offset = 0usize;
-
-        while position.is_none() {
-            let url = format!(
-                "{base_url}?fields=snapshot_id,tracks.items(is_local,track(uri)),tracks.next&limit=100&offset={offset}"
-            );
-            let page: SpotifyPlaylistDetails =
-                self.schedule_playlist_wait("get playlist items for local removal", || {
-                    ureq::get(&url)
-                        .header("Authorization", &format!("Bearer {token}"))
-                        .call()
-                })?;
-
-            if snapshot_id.is_none() {
-                snapshot_id = Some(page.snapshot_id);
-            }
-
-            if let Some(index) = page.tracks.items.iter().position(|item| {
-                item.is_local
-                    && item.track.as_ref().and_then(|track| track.uri.as_deref())
-                        == Some(local_track_uri)
-            }) {
-                position = Some(offset + index);
-                break;
-            }
-
-            if page.tracks.next.is_none() {
-                break;
-            }
-
-            offset += page.tracks.items.len();
-        }
-
-        let position = position.ok_or_else(|| {
-            anyhow::anyhow!(
-                "Local track '{local_track_uri}' was not found in playlist '{playlist_id}'"
-            )
-        })?;
-        let snapshot_id = snapshot_id.ok_or_else(|| {
-            anyhow::anyhow!("Playlist '{playlist_id}' snapshot id is unavailable")
-        })?;
-        let url = self
-            .url(SpotifyApiAction::PlaylistItems)?
-            .replace("{id}", playlist_id);
-        let payload = json!({
-            "items": [{ "uri": local_track_uri, "positions": [position] }],
-            "snapshot_id": snapshot_id,
-        });
-
-        self.schedule_playlist_wait_empty("remove local track from playlist", || {
-            ureq::delete(&url)
-                .force_send_body()
-                .header("Authorization", &format!("Bearer {token}"))
-                .header("Content-Type", "application/json")
-                .send_json(payload.clone())
-        })?;
-
         Ok(())
     }
 

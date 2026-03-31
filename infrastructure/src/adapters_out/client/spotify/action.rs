@@ -3,7 +3,6 @@ pub enum SpotifyApiAction {
     CurrentlyPlaying,
     MyPlaylists,
     Library,
-    Playlist,
     PlaylistItems,
     NextTrack,
 }
