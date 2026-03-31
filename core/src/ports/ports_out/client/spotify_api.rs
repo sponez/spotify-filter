@@ -3,6 +3,7 @@ use crate::errors::errors::AppResult;
 pub struct CurrentlyPlayingResponse {
     pub context_uri: Option<String>,
     pub track_uri: String,
+    pub is_local: bool,
 }
 
 pub struct PlaylistSummary {

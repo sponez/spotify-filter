@@ -31,13 +31,14 @@ impl RefreshTokenStore for KeyringRefreshTokenStore {
     }
 
     fn store(&self, refresh_token: &str) -> Result<(), TokenStoreError> {
-        info!(len = refresh_token.len(), "Storing refresh token to keyring");
-        self.entry()?
-            .set_password(refresh_token)
-            .map_err(|e| {
-                error!(error = %e, "Failed to store refresh token to keyring");
-                TokenStoreError::StoreFailed(anyhow::anyhow!("{e}"))
-            })
+        info!(
+            len = refresh_token.len(),
+            "Storing refresh token to keyring"
+        );
+        self.entry()?.set_password(refresh_token).map_err(|e| {
+            error!(error = %e, "Failed to store refresh token to keyring");
+            TokenStoreError::StoreFailed(anyhow::anyhow!("{e}"))
+        })
     }
 
     fn delete(&self) -> Result<(), TokenStoreError> {

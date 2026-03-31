@@ -5,19 +5,18 @@ edition.workspace = true
 
 [dependencies]
 domain = { path = "../core", package = "core" }
-global-hotkey = "0.7"
+global-hotkey.workspace = true
 gui = { path = "../gui" }
 infrastructure = { path = "../infrastructure" }
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
-tray-icon = "0.21"
-serde_json = "1"
-slint = "1.15"
-dotenvy = "0.15"
-image = "0.25"
-url = "2"
+serde.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tray-icon.workspace = true
+slint.workspace = true
+dotenvy.workspace = true
+image.workspace = true
+url.workspace = true
 
 [build-dependencies]
-winres = "0.1"
+winres.workspace = true

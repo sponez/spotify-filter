@@ -6,13 +6,9 @@ use crate::{
     errors::errors::AppResult,
     ports::{
         ports_in::settings::{
-            models::PlaylistItemView,
-            usecases::get_playlists::GetPlaylistsUseCase,
+            models::PlaylistItemView, usecases::get_playlists::GetPlaylistsUseCase,
         },
-        ports_out::{
-            client::spotify_api::SpotifyApiClient,
-            notification::ErrorNotification,
-        },
+        ports_out::{client::spotify_api::SpotifyApiClient, notification::ErrorNotification},
     },
 };
 
@@ -30,7 +26,10 @@ struct PlaylistCacheState {
 impl GetPlaylistsInteractor {
     const CACHE_TTL: Duration = Duration::from_secs(300);
 
-    pub fn new(api_client: Arc<dyn SpotifyApiClient>, notifier: Arc<dyn ErrorNotification>) -> Self {
+    pub fn new(
+        api_client: Arc<dyn SpotifyApiClient>,
+        notifier: Arc<dyn ErrorNotification>,
+    ) -> Self {
         Self {
             api_client,
             notifier,
@@ -50,23 +49,24 @@ impl GetPlaylistsUseCase for GetPlaylistsInteractor {
                 Ok(g) => g,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            if let Some(loaded_at) = cache.loaded_at {
-                if now.saturating_duration_since(loaded_at) < Self::CACHE_TTL {
-                    info!(count = cache.items.len(), "Returning playlists from cache");
-                    return Ok(cache.items.clone());
-                }
+            if let Some(loaded_at) = cache.loaded_at
+                && now.saturating_duration_since(loaded_at) < Self::CACHE_TTL
+            {
+                info!(count = cache.items.len(), "Returning playlists from cache");
+                return Ok(cache.items.clone());
             }
         }
 
         info!("Loading playlists from Spotify API");
-        let fetched = self.api_client
-            .get_my_playlists()
-            .map(|items| {
-                items
-                    .into_iter()
-                    .map(|p| PlaylistItemView { id: p.id, name: p.name })
-                    .collect::<Vec<_>>()
-            });
+        let fetched = self.api_client.get_my_playlists().map(|items| {
+            items
+                .into_iter()
+                .map(|p| PlaylistItemView {
+                    id: p.id,
+                    name: p.name,
+                })
+                .collect::<Vec<_>>()
+        });
 
         let fetched = match fetched {
             Ok(items) => items,

@@ -29,6 +29,12 @@ impl JsonFileSettingsStore {
     }
 }
 
+impl Default for JsonFileSettingsStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SettingsStore for JsonFileSettingsStore {
     fn load(&self) -> Result<(PassActionView, PassTargetView), SettingsStoreError> {
         let path = Self::path();
@@ -46,7 +52,11 @@ impl SettingsStore for JsonFileSettingsStore {
         }
     }
 
-    fn save(&self, action: &PassActionView, target: &PassTargetView) -> Result<(), SettingsStoreError> {
+    fn save(
+        &self,
+        action: &PassActionView,
+        target: &PassTargetView,
+    ) -> Result<(), SettingsStoreError> {
         let path = Self::path();
         let tmp = path.with_extension("tmp");
         info!(path = %path.display(), "Saving settings file");
@@ -55,10 +65,8 @@ impl SettingsStore for JsonFileSettingsStore {
         let content = serde_json::to_string_pretty(&dto)
             .map_err(|e| SettingsStoreError::WriteFailed(e.into()))?;
 
-        std::fs::write(&tmp, content)
-            .map_err(|e| SettingsStoreError::WriteFailed(e.into()))?;
-        std::fs::rename(&tmp, &path)
-            .map_err(|e| SettingsStoreError::WriteFailed(e.into()))?;
+        std::fs::write(&tmp, content).map_err(|e| SettingsStoreError::WriteFailed(e.into()))?;
+        std::fs::rename(&tmp, &path).map_err(|e| SettingsStoreError::WriteFailed(e.into()))?;
 
         Ok(())
     }

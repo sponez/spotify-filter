@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use domain::errors::errors::AppResult;
 use tracing::{debug, warn};
+use ureq::Body;
 
 struct RateState {
     next_allowed_at: Instant,
@@ -21,6 +22,8 @@ pub(crate) struct RequestScheduler {
     min_request_interval: Duration,
 }
 
+type HttpResponse = ureq::http::Response<Body>;
+
 impl RequestScheduler {
     pub fn new(min_request_interval: Duration) -> Self {
         Self {
@@ -32,9 +35,9 @@ impl RequestScheduler {
         }
     }
 
-    pub fn run<T, F>(&self, op_name: &str, mode: ScheduleMode, mut op: F) -> AppResult<T>
+    pub fn run<F>(&self, op_name: &str, mode: ScheduleMode, mut op: F) -> AppResult<HttpResponse>
     where
-        F: FnMut() -> Result<T, ureq::Error>,
+        F: FnMut() -> Result<HttpResponse, ureq::Error>,
     {
         let _request_guard = match self.request_lock.lock() {
             Ok(g) => g,
@@ -43,8 +46,7 @@ impl RequestScheduler {
 
         self.try_acquire_rate_slot(op_name, mode)?;
         match op() {
-            Ok(value) => Ok(value),
-            Err(ureq::Error::Status(429, response)) => {
+            Ok(response) if response.status().as_u16() == 429 => {
                 let wait = Self::parse_retry_after(&response);
                 self.defer_requests(wait);
                 warn!(
@@ -58,19 +60,22 @@ impl RequestScheduler {
                 )
                 .into())
             }
-            Err(ureq::Error::Status(status, response)) => {
-                let status_text = response.status_text().to_string();
+            Ok(mut response)
+                if response.status().is_client_error() || response.status().is_server_error() =>
+            {
+                let status = response.status().as_u16();
+                let status_text = response.status().canonical_reason().unwrap_or("Unknown");
                 let body = response
-                    .into_string()
+                    .body_mut()
+                    .read_to_string()
                     .unwrap_or_else(|_| "<unreadable body>".to_string());
                 Err(anyhow::anyhow!(
                     "{op_name} failed with status {status} {status_text}; body: {body}"
                 )
                 .into())
             }
-            Err(ureq::Error::Transport(e)) => {
-                Err(anyhow::anyhow!("{op_name} transport error: {e}").into())
-            }
+            Ok(value) => Ok(value),
+            Err(e) => Err(anyhow::anyhow!("{op_name} request error: {e}").into()),
         }
     }
 
@@ -124,12 +129,13 @@ impl RequestScheduler {
         state.next_allowed_at = std::cmp::max(state.next_allowed_at, Instant::now() + wait);
     }
 
-    fn parse_retry_after(resp: &ureq::Response) -> Duration {
+    fn parse_retry_after(resp: &HttpResponse) -> Duration {
         let secs = resp
-            .header("Retry-After")
+            .headers()
+            .get("Retry-After")
+            .and_then(|h| h.to_str().ok())
             .and_then(|h| h.trim().parse::<u64>().ok())
             .unwrap_or(DEFAULT_RETRY_AFTER.as_secs());
         Duration::from_secs(secs.max(1))
     }
 }
-

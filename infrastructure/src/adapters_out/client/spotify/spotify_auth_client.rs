@@ -13,7 +13,11 @@ pub struct UreqSpotifyAuthClient {
 
 impl UreqSpotifyAuthClient {
     pub fn new(token_uri: String, client_id: String, redirect_uri: String) -> Self {
-        Self { token_uri, client_id, redirect_uri }
+        Self {
+            token_uri,
+            client_id,
+            redirect_uri,
+        }
     }
 }
 
@@ -34,8 +38,8 @@ struct SpotifyRefreshResponse {
 impl SpotifyAuthClient for UreqSpotifyAuthClient {
     fn exchange_code(&self, code: &str, code_verifier: &str) -> AppResult<TokenResponse> {
         info!("Exchanging authorization code for access token");
-        let resp: SpotifyTokenResponse = ureq::post(&self.token_uri)
-            .send_form(&[
+        let mut response = ureq::post(&self.token_uri)
+            .send_form([
                 ("grant_type", "authorization_code"),
                 ("code", code),
                 ("redirect_uri", &self.redirect_uri),
@@ -45,12 +49,11 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
             .map_err(|e| {
                 error!(error = %e, "Token exchange request failed");
                 anyhow::anyhow!("Token exchange request failed: {e}")
-            })?
-            .into_json()
-            .map_err(|e| {
-                error!(error = %e, "Failed to parse token exchange response");
-                anyhow::anyhow!("Failed to parse token response: {e}")
             })?;
+        let resp: SpotifyTokenResponse = response.body_mut().read_json().map_err(|e| {
+            error!(error = %e, "Failed to parse token exchange response");
+            anyhow::anyhow!("Failed to parse token response: {e}")
+        })?;
 
         Ok(TokenResponse {
             access_token: resp.access_token,
@@ -61,8 +64,8 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
 
     fn refresh_token(&self, refresh_token: &str) -> AppResult<TokenResponse> {
         info!("Refreshing Spotify access token");
-        let resp: SpotifyRefreshResponse = ureq::post(&self.token_uri)
-            .send_form(&[
+        let mut response = ureq::post(&self.token_uri)
+            .send_form([
                 ("grant_type", "refresh_token"),
                 ("refresh_token", refresh_token),
                 ("client_id", &self.client_id),
@@ -70,16 +73,17 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
             .map_err(|e| {
                 error!(error = %e, "Token refresh request failed");
                 anyhow::anyhow!("Token refresh request failed: {e}")
-            })?
-            .into_json()
-            .map_err(|e| {
-                error!(error = %e, "Failed to parse token refresh response");
-                anyhow::anyhow!("Failed to parse refresh response: {e}")
             })?;
+        let resp: SpotifyRefreshResponse = response.body_mut().read_json().map_err(|e| {
+            error!(error = %e, "Failed to parse token refresh response");
+            anyhow::anyhow!("Failed to parse refresh response: {e}")
+        })?;
 
         Ok(TokenResponse {
             access_token: resp.access_token,
-            refresh_token: resp.refresh_token.unwrap_or_else(|| refresh_token.to_string()),
+            refresh_token: resp
+                .refresh_token
+                .unwrap_or_else(|| refresh_token.to_string()),
             expires_in: resp.expires_in,
         })
     }

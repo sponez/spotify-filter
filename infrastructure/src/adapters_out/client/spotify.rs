@@ -1,5 +1,6 @@
 // pub mod spotify_client;
 pub mod action;
+pub mod playlist_sync_scheduler;
 pub mod request_scheduler;
 pub mod spotify_api_client;
 pub mod spotify_auth_client;

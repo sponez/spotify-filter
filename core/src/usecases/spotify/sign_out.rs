@@ -24,7 +24,11 @@ impl SignOutInteractor {
         refresh_token_store: Arc<dyn RefreshTokenStore>,
         notifier: Arc<dyn ErrorNotification>,
     ) -> Self {
-        Self { token_cache, refresh_token_store, notifier }
+        Self {
+            token_cache,
+            refresh_token_store,
+            notifier,
+        }
     }
 }
 

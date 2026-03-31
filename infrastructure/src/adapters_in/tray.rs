@@ -29,9 +29,11 @@ impl TrayEventListener {
 
     pub fn start_polling(self: Arc<Self>, tx: Sender<AppRequest>) {
         info!("Starting tray polling thread");
-        std::thread::spawn(move || loop {
-            self.poll(&tx);
-            std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::spawn(move || {
+            loop {
+                self.poll(&tx);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
         });
     }
 

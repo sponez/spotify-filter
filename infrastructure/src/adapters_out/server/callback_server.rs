@@ -21,11 +21,10 @@ impl TinyHttpCallbackServer {
 impl CallbackServer for TinyHttpCallbackServer {
     fn start(&self) -> AppResult<Box<dyn CallbackHandle>> {
         info!(address = %self.addr, path = %self.path, "Starting callback server");
-        let server = Server::http(&self.addr)
-            .map_err(|e| {
-                error!(error = %e, "Failed to start callback server");
-                CallbackServerError::StartFailed(anyhow::anyhow!("{e}"))
-            })?;
+        let server = Server::http(&self.addr).map_err(|e| {
+            error!(error = %e, "Failed to start callback server");
+            CallbackServerError::StartFailed(anyhow::anyhow!("{e}"))
+        })?;
 
         Ok(Box::new(TinyHttpCallbackHandle {
             server,
@@ -63,18 +62,20 @@ impl CallbackHandle for TinyHttpCallbackHandle {
     fn wait_for_callback(&self) -> AppResult<CallbackResponse> {
         info!("Waiting for OAuth callback request");
         loop {
-            let request = self.server.recv()
-                .map_err(|e| {
-                    error!(error = %e, "Failed to receive callback request");
-                    CallbackServerError::ReceiveFailed(anyhow::Error::from(e))
-                })?;
+            let request = self.server.recv().map_err(|e| {
+                error!(error = %e, "Failed to receive callback request");
+                CallbackServerError::ReceiveFailed(anyhow::Error::from(e))
+            })?;
 
             if let Some((code, state)) = Self::extract_params(request.url(), &self.path) {
                 debug!("Received OAuth callback with code/state");
-                let response = Response::from_string(include_str!("../../../resources/auth_success.html"))
-                    .with_header(
-                        "Content-Type: text/html".parse::<tiny_http::Header>().unwrap(),
-                    );
+                let response =
+                    Response::from_string(include_str!("../../../resources/auth_success.html"))
+                        .with_header(
+                            "Content-Type: text/html"
+                                .parse::<tiny_http::Header>()
+                                .unwrap(),
+                        );
                 request.respond(response).ok();
                 info!("OAuth callback processed");
                 return Ok(CallbackResponse { code, state });

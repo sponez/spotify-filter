@@ -7,7 +7,10 @@ use crate::adapters_out::repository::settings::dto::settings_dto::{
 // ---- Cache ↔ View ----
 
 pub fn cache_dto_to_view(dto: SettingsCacheDto) -> (PassActionView, PassTargetView) {
-    (action_dto_to_view(dto.filter_action), target_dto_to_view(dto.filter_target))
+    (
+        action_dto_to_view(dto.filter_action),
+        target_dto_to_view(dto.filter_target),
+    )
 }
 
 pub fn view_to_cache_dto(action: &PassActionView, target: &PassTargetView) -> SettingsCacheDto {
@@ -20,7 +23,10 @@ pub fn view_to_cache_dto(action: &PassActionView, target: &PassTargetView) -> Se
 // ---- File ↔ View ----
 
 pub fn file_dto_to_view(dto: SettingsFileDto) -> (PassActionView, PassTargetView) {
-    (action_dto_to_view(dto.filter_action), target_dto_to_view(dto.filter_target))
+    (
+        action_dto_to_view(dto.filter_action),
+        target_dto_to_view(dto.filter_target),
+    )
 }
 
 pub fn view_to_file_dto(action: &PassActionView, target: &PassTargetView) -> SettingsFileDto {
@@ -55,7 +61,10 @@ fn action_view_to_dto(action: &PassActionView) -> FilterActionDto {
     }
 }
 
-fn target_view_to_dto(action: &PassActionView, target: &PassTargetView) -> Option<PlaylistTargetDto> {
+fn target_view_to_dto(
+    action: &PassActionView,
+    target: &PassTargetView,
+) -> Option<PlaylistTargetDto> {
     match action {
         PassActionView::None => None,
         _ => Some(match target {

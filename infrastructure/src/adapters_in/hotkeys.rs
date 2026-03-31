@@ -1,14 +1,13 @@
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc::Sender,
-    Mutex,
 };
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 use domain::ports::ports_in::events::AppRequest;
-use global_hotkey::{ GlobalHotKeyEvent, HotKeyState };
+use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 
 pub struct HotkeyEventListener {
     filter_id: u32,
@@ -47,9 +46,11 @@ impl HotkeyEventListener {
 
     pub fn start_polling(self: Arc<Self>, tx: Sender<AppRequest>, authorized: Arc<AtomicBool>) {
         info!("Starting hotkey polling thread");
-        std::thread::spawn(move || loop {
-            self.poll(&tx, &authorized);
-            std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::spawn(move || {
+            loop {
+                self.poll(&tx, &authorized);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
         });
     }
 

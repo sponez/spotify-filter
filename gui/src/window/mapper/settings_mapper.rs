@@ -4,12 +4,14 @@ use slint::ComponentHandle;
 use slint::ModelRc;
 use slint::VecModel;
 
-use domain::ports::ports_in::settings::models::{PassActionView, PassTargetView, PlaylistItemView, SettingsView};
+use domain::ports::ports_in::settings::models::{
+    PassActionView, PassTargetView, PlaylistItemView, SettingsView,
+};
 
 use crate::{AppWindow, FilterActionEnum};
 
 thread_local! {
-    static PLAYLISTS: RefCell<Vec<PlaylistItemView>> = RefCell::new(Vec::new());
+    static PLAYLISTS: RefCell<Vec<PlaylistItemView>> = const { RefCell::new(Vec::new()) };
 }
 
 pub fn action_view_to_slint(action: &PassActionView) -> FilterActionEnum {
@@ -49,9 +51,7 @@ fn playlist_id_by_index(index: i32) -> Option<String> {
     if index < 0 {
         return None;
     }
-    PLAYLISTS.with(|p| {
-        p.borrow().get(index as usize).map(|item| item.id.clone())
-    })
+    PLAYLISTS.with(|p| p.borrow().get(index as usize).map(|item| item.id.clone()))
 }
 
 pub fn apply_settings_view_to_window(w: &AppWindow, view: SettingsView) {
@@ -63,31 +63,32 @@ pub fn apply_settings_view_to_window(w: &AppWindow, view: SettingsView) {
 }
 
 thread_local! {
-    static SELECTED_TARGET: RefCell<Option<PassTargetView>> = RefCell::new(None);
+    static SELECTED_TARGET: RefCell<Option<PassTargetView>> = const { RefCell::new(None) };
 }
 
 pub fn apply_playlists_to_window(w: &AppWindow, mut playlists: Vec<PlaylistItemView>) {
     // Resolve selected index, inserting "playlist deleted" placeholder if needed
-    let selected_index = SELECTED_TARGET.with(|t| {
-        match t.borrow().as_ref() {
-            Some(PassTargetView::Playlist(id)) if !id.is_empty() => {
-                match playlists.iter().position(|p| p.id == *id) {
-                    Some(i) => i as i32,
-                    None => {
-                        playlists.insert(0, PlaylistItemView {
+    let selected_index = SELECTED_TARGET.with(|t| match t.borrow().as_ref() {
+        Some(PassTargetView::Playlist(id)) if !id.is_empty() => {
+            match playlists.iter().position(|p| p.id == *id) {
+                Some(i) => i as i32,
+                None => {
+                    playlists.insert(
+                        0,
+                        PlaylistItemView {
                             id: id.clone(),
                             name: "playlist deleted".to_string(),
-                        });
-                        0
-                    }
+                        },
+                    );
+                    0
                 }
             }
-            _ => -1,
         }
+        _ => -1,
     });
-    
 
-    let names: Vec<slint::SharedString> = playlists.iter()
+    let names: Vec<slint::SharedString> = playlists
+        .iter()
         .map(|p| slint::SharedString::from(&p.name))
         .collect();
     w.set_filter_playlist_model(ModelRc::new(VecModel::from(names)));
@@ -99,17 +100,21 @@ pub fn apply_playlists_to_window(w: &AppWindow, mut playlists: Vec<PlaylistItemV
     w.set_filter_playlist_index(selected_index);
     let weak = w.as_weak();
     let timer = slint::Timer::default();
-    timer.start(slint::TimerMode::Repeated, std::time::Duration::from_millis(10), move || {
-        let Some(w) = weak.upgrade() else { return };
-        if w.get_filter_playlist_index() == selected_index {
-            CAS_TIMER.with(|t| t.borrow_mut().take());
-            return;
-        }
-        w.set_filter_playlist_index(selected_index);
-    });
+    timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(10),
+        move || {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_filter_playlist_index() == selected_index {
+                CAS_TIMER.with(|t| t.borrow_mut().take());
+                return;
+            }
+            w.set_filter_playlist_index(selected_index);
+        },
+    );
     CAS_TIMER.with(|t| *t.borrow_mut() = Some(timer));
 }
 
 thread_local! {
-    static CAS_TIMER: RefCell<Option<slint::Timer>> = RefCell::new(None);
+    static CAS_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
 }

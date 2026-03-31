@@ -8,19 +8,14 @@ use tracing::{debug, error, info, warn};
 use domain::ports::ports_in::{
     events::{AppRequest, AppResponse},
     settings::usecases::{
-        get_playlists::GetPlaylistsUseCase,
-        get_settings::GetSettingsUseCase,
+        get_playlists::GetPlaylistsUseCase, get_settings::GetSettingsUseCase,
         save_settings::SaveSettingsUseCase,
     },
     spotify::usecases::{
-        filter_track::FilterTrackUseCase,
-        pass_track::PassTrackUseCase,
-        sign_in::SignInUseCase,
+        filter_track::FilterTrackUseCase, pass_track::PassTrackUseCase, sign_in::SignInUseCase,
         sign_out::SignOutUseCase,
-        try_sign_in::TrySignInUseCase,
     },
 };
-use domain::ports::ports_out::repository::token::TokenCache;
 
 pub struct EventDispatcher {
     rx: Receiver<AppRequest>,
@@ -33,8 +28,16 @@ pub struct EventDispatcher {
     get_settings: Arc<dyn GetSettingsUseCase>,
     get_playlists: Arc<dyn GetPlaylistsUseCase>,
     save_settings: Arc<dyn SaveSettingsUseCase>,
-    try_sign_in: Arc<dyn TrySignInUseCase>,
-    token_cache: Arc<dyn TokenCache>,
+}
+
+pub struct EventDispatcherDependencies {
+    pub sign_in: Arc<dyn SignInUseCase>,
+    pub sign_out: Arc<dyn SignOutUseCase>,
+    pub filter_track: Arc<dyn FilterTrackUseCase>,
+    pub pass_track: Arc<dyn PassTrackUseCase>,
+    pub get_settings: Arc<dyn GetSettingsUseCase>,
+    pub get_playlists: Arc<dyn GetPlaylistsUseCase>,
+    pub save_settings: Arc<dyn SaveSettingsUseCase>,
 }
 
 impl EventDispatcher {
@@ -42,40 +45,19 @@ impl EventDispatcher {
         rx: Receiver<AppRequest>,
         tx: Sender<AppResponse>,
         authorized: Arc<AtomicBool>,
-        sign_in: Arc<dyn SignInUseCase>,
-        sign_out: Arc<dyn SignOutUseCase>,
-        filter_track: Arc<dyn FilterTrackUseCase>,
-        pass_track: Arc<dyn PassTrackUseCase>,
-        get_settings: Arc<dyn GetSettingsUseCase>,
-        get_playlists: Arc<dyn GetPlaylistsUseCase>,
-        save_settings: Arc<dyn SaveSettingsUseCase>,
-        try_sign_in: Arc<dyn TrySignInUseCase>,
-        token_cache: Arc<dyn TokenCache>,
+        deps: EventDispatcherDependencies,
     ) -> Self {
         Self {
             rx,
             tx,
             authorized,
-            sign_in,
-            sign_out,
-            filter_track,
-            pass_track,
-            get_settings,
-            get_playlists,
-            save_settings,
-            try_sign_in,
-            token_cache,
-        }
-    }
-
-    fn refresh_token_if_needed(&self) {
-        if self.token_cache.is_expiring_soon() {
-            info!("Access token expiring soon, trying refresh");
-            match self.try_sign_in.try_sign_in() {
-                Ok(true) => info!("Token refresh succeeded"),
-                Ok(false) => warn!("Token refresh skipped: no refresh token"),
-                Err(e) => error!(error = %e, "Token refresh failed"),
-            }
+            sign_in: deps.sign_in,
+            sign_out: deps.sign_out,
+            filter_track: deps.filter_track,
+            pass_track: deps.pass_track,
+            get_settings: deps.get_settings,
+            get_playlists: deps.get_playlists,
+            save_settings: deps.save_settings,
         }
     }
 
@@ -116,7 +98,6 @@ impl EventDispatcher {
                     AppResponse::SignOutCompleted(result)
                 }
                 AppRequest::FilterTrack => {
-                    self.refresh_token_if_needed();
                     let result = self.filter_track.filter_current_track();
                     if let Err(ref e) = result {
                         error!(error = %e, "Filter track command failed");
@@ -124,7 +105,6 @@ impl EventDispatcher {
                     AppResponse::FilterTrackCompleted(result)
                 }
                 AppRequest::PassTrack => {
-                    self.refresh_token_if_needed();
                     let result = self.pass_track.pass_current_track();
                     if let Err(ref e) = result {
                         error!(error = %e, "Pass track command failed");
@@ -139,7 +119,6 @@ impl EventDispatcher {
                     AppResponse::SettingsLoaded(result)
                 }
                 AppRequest::GetPlaylists => {
-                    self.refresh_token_if_needed();
                     let result = self.get_playlists.get_playlists();
                     if let Err(ref e) = result {
                         error!(error = %e, "Get playlists command failed");

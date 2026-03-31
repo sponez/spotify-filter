@@ -4,10 +4,7 @@ use tracing::{error, info};
 use crate::{
     errors::errors::AppResult,
     ports::{
-        ports_in::settings::{
-            models::SettingsView,
-            usecases::get_settings::GetSettingsUseCase,
-        },
+        ports_in::settings::{models::SettingsView, usecases::get_settings::GetSettingsUseCase},
         ports_out::{
             notification::ErrorNotification,
             repository::settings::{SettingsCache, SettingsStore},
@@ -27,7 +24,11 @@ impl GetSettingsInteractor {
         file: Arc<dyn SettingsStore>,
         notifier: Arc<dyn ErrorNotification>,
     ) -> Self {
-        Self { cache, file, notifier }
+        Self {
+            cache,
+            file,
+            notifier,
+        }
     }
 }
 
@@ -49,6 +50,9 @@ impl GetSettingsUseCase for GetSettingsInteractor {
         };
 
         info!("Settings loaded");
-        Ok(SettingsView { pass_action: filter_action, pass_target: filter_target })
+        Ok(SettingsView {
+            pass_action: filter_action,
+            pass_target: filter_target,
+        })
     }
 }
