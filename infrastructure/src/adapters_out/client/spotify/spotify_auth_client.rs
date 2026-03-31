@@ -50,13 +50,10 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
                 error!(error = %e, "Token exchange request failed");
                 anyhow::anyhow!("Token exchange request failed: {e}")
             })?;
-        let resp: SpotifyTokenResponse = response
-            .body_mut()
-            .read_json()
-            .map_err(|e| {
-                error!(error = %e, "Failed to parse token exchange response");
-                anyhow::anyhow!("Failed to parse token response: {e}")
-            })?;
+        let resp: SpotifyTokenResponse = response.body_mut().read_json().map_err(|e| {
+            error!(error = %e, "Failed to parse token exchange response");
+            anyhow::anyhow!("Failed to parse token response: {e}")
+        })?;
 
         Ok(TokenResponse {
             access_token: resp.access_token,
@@ -77,13 +74,10 @@ impl SpotifyAuthClient for UreqSpotifyAuthClient {
                 error!(error = %e, "Token refresh request failed");
                 anyhow::anyhow!("Token refresh request failed: {e}")
             })?;
-        let resp: SpotifyRefreshResponse = response
-            .body_mut()
-            .read_json()
-            .map_err(|e| {
-                error!(error = %e, "Failed to parse token refresh response");
-                anyhow::anyhow!("Failed to parse refresh response: {e}")
-            })?;
+        let resp: SpotifyRefreshResponse = response.body_mut().read_json().map_err(|e| {
+            error!(error = %e, "Failed to parse token refresh response");
+            anyhow::anyhow!("Failed to parse refresh response: {e}")
+        })?;
 
         Ok(TokenResponse {
             access_token: resp.access_token,

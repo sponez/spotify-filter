@@ -60,7 +60,9 @@ impl RequestScheduler {
                 )
                 .into())
             }
-            Ok(mut response) if response.status().is_client_error() || response.status().is_server_error() => {
+            Ok(mut response)
+                if response.status().is_client_error() || response.status().is_server_error() =>
+            {
                 let status = response.status().as_u16();
                 let status_text = response.status().canonical_reason().unwrap_or("Unknown");
                 let body = response

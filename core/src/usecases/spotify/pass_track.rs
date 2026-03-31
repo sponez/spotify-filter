@@ -48,6 +48,10 @@ impl PassTrackInteractor {
         info!(track_uri = %track.track_uri, "Pass current track requested");
         let settings = self.settings_provider.get_settings()?;
 
+        if track.is_local {
+            return self.pass_local_track(&settings.pass_action);
+        }
+
         if let Some(context_uri_str) = track.context_uri {
             let context_uri = parse_spotify_uri(&context_uri_str)?;
             debug!(context_uri = %context_uri_str, "Resolved playback context");
@@ -67,6 +71,21 @@ impl PassTrackInteractor {
                 }
             }
         }
+        Ok(())
+    }
+
+    fn pass_local_track(&self, action: &PassActionView) -> AppResult<()> {
+        match action {
+            PassActionView::None => {
+                info!("Pass action for local track: skip only");
+            }
+            PassActionView::AddToPlaylist | PassActionView::MoveToPlaylist => {
+                info!("Pass action for local track is not supported by Spotify Web API");
+                self.notifier
+                    .notify("Local tracks cannot be moved or saved via Spotify Web API");
+            }
+        }
+        self.api_client.skip_to_next()?;
         Ok(())
     }
 
@@ -139,6 +158,168 @@ impl PassTrackInteractor {
             _ => {}
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::{
+        errors::errors::AppResult,
+        ports::{
+            ports_in::settings::{
+                models::{PassActionView, PassTargetView, SettingsView},
+                usecases::get_settings::GetSettingsUseCase,
+            },
+            ports_out::{
+                client::spotify_api::{
+                    CurrentlyPlayingResponse, PlaylistSummary, SpotifyApiClient,
+                },
+                notification::ErrorNotification,
+            },
+        },
+        usecases::spotify::pass_track::PassTrackInteractor,
+    };
+
+    #[derive(Default)]
+    struct TestState {
+        added_to_library: Vec<Vec<String>>,
+        removed_from_library: Vec<Vec<String>>,
+        added_to_playlist: Vec<(String, Vec<String>)>,
+        removed_from_playlist: Vec<(String, Vec<String>)>,
+        removed_local_from_playlist: Vec<(String, String)>,
+        skipped: usize,
+        notifications: Vec<String>,
+    }
+
+    struct TestSpotifyApiClient {
+        state: Arc<Mutex<TestState>>,
+    }
+
+    impl SpotifyApiClient for TestSpotifyApiClient {
+        fn get_currently_playing(&self) -> AppResult<Option<CurrentlyPlayingResponse>> {
+            unreachable!()
+        }
+
+        fn get_my_playlists(&self) -> AppResult<Vec<PlaylistSummary>> {
+            unreachable!()
+        }
+
+        fn add_to_library(&self, uris: &[&str]) -> AppResult<()> {
+            self.state
+                .lock()
+                .unwrap()
+                .added_to_library
+                .push(uris.iter().map(|uri| (*uri).to_string()).collect());
+            Ok(())
+        }
+
+        fn remove_from_library(&self, uris: &[&str]) -> AppResult<()> {
+            self.state
+                .lock()
+                .unwrap()
+                .removed_from_library
+                .push(uris.iter().map(|uri| (*uri).to_string()).collect());
+            Ok(())
+        }
+
+        fn add_to_playlist(&self, playlist_id: &str, uris: &[&str]) -> AppResult<()> {
+            self.state.lock().unwrap().added_to_playlist.push((
+                playlist_id.to_string(),
+                uris.iter().map(|uri| (*uri).to_string()).collect(),
+            ));
+            Ok(())
+        }
+
+        fn remove_from_playlist(&self, playlist_id: &str, uris: &[&str]) -> AppResult<()> {
+            self.state.lock().unwrap().removed_from_playlist.push((
+                playlist_id.to_string(),
+                uris.iter().map(|uri| (*uri).to_string()).collect(),
+            ));
+            Ok(())
+        }
+
+        fn remove_local_from_playlist(
+            &self,
+            playlist_id: &str,
+            local_track_uri: &str,
+        ) -> AppResult<()> {
+            self.state
+                .lock()
+                .unwrap()
+                .removed_local_from_playlist
+                .push((playlist_id.to_string(), local_track_uri.to_string()));
+            Ok(())
+        }
+
+        fn skip_to_next(&self) -> AppResult<()> {
+            self.state.lock().unwrap().skipped += 1;
+            Ok(())
+        }
+    }
+
+    struct TestSettings {
+        settings: SettingsView,
+    }
+
+    impl GetSettingsUseCase for TestSettings {
+        fn get_settings(&self) -> AppResult<SettingsView> {
+            Ok(self.settings.clone())
+        }
+    }
+
+    struct TestNotifier {
+        state: Arc<Mutex<TestState>>,
+    }
+
+    impl ErrorNotification for TestNotifier {
+        fn notify(&self, message: &str) {
+            self.state
+                .lock()
+                .unwrap()
+                .notifications
+                .push(message.to_string());
+        }
+    }
+
+    #[test]
+    fn local_add_or_move_does_not_enqueue_mutations() {
+        let state = Arc::new(Mutex::new(TestState::default()));
+        let interactor = PassTrackInteractor::new(
+            Arc::new(TestSpotifyApiClient {
+                state: Arc::clone(&state),
+            }),
+            Arc::new(TestSettings {
+                settings: SettingsView {
+                    pass_action: PassActionView::MoveToPlaylist,
+                    pass_target: PassTargetView::Playlist("target".to_string()),
+                },
+            }),
+            Arc::new(TestNotifier {
+                state: Arc::clone(&state),
+            }),
+        );
+
+        interactor
+            .pass_track(CurrentlyPlayingResponse {
+                context_uri: Some("spotify:playlist:source".to_string()),
+                track_uri: "spotify:local:artist:album:track:123".to_string(),
+                is_local: true,
+            })
+            .unwrap();
+
+        let state = state.lock().unwrap();
+        assert!(state.added_to_library.is_empty());
+        assert!(state.removed_from_library.is_empty());
+        assert!(state.added_to_playlist.is_empty());
+        assert!(state.removed_from_playlist.is_empty());
+        assert!(state.removed_local_from_playlist.is_empty());
+        assert_eq!(state.skipped, 1);
+        assert_eq!(
+            state.notifications,
+            vec!["Local tracks cannot be moved or saved via Spotify Web API".to_string()]
+        );
     }
 }
 

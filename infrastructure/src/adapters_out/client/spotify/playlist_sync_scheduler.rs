@@ -306,10 +306,7 @@ impl PlaylistSyncScheduler {
                 let path = Self::path(paths, SpotifyApiAction::PlaylistItems)?
                     .replace("{id}", playlist_id);
                 let url = format!("{base_url}{path}");
-                let tracks: Vec<_> = ordered_uris
-                    .iter()
-                    .map(|u| json!({ "uri": u }))
-                    .collect();
+                let tracks: Vec<_> = ordered_uris.iter().map(|u| json!({ "uri": u })).collect();
                 scheduler.run("cron remove from playlist", ScheduleMode::Wait, || {
                     ureq::delete(&url)
                         .force_send_body()

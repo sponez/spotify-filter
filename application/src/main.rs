@@ -31,8 +31,10 @@ use domain::{
             save_settings::SaveSettingsInteractor,
         },
         spotify::{
-            filter_track::FilterTrackInteractor, pass_track::PassTrackInteractor,
-            sign_in::{SignInDependencies, SignInInteractor}, sign_out::SignOutInteractor,
+            filter_track::FilterTrackInteractor,
+            pass_track::PassTrackInteractor,
+            sign_in::{SignInDependencies, SignInInteractor},
+            sign_out::SignOutInteractor,
             try_sign_in::TrySignInInteractor,
         },
     },
@@ -77,6 +79,7 @@ fn map_spotify_action(action: SpotifyAction) -> SpotifyApiAction {
         SpotifyAction::CurrentlyPlaying => SpotifyApiAction::CurrentlyPlaying,
         SpotifyAction::MyPlaylists => SpotifyApiAction::MyPlaylists,
         SpotifyAction::Library => SpotifyApiAction::Library,
+        SpotifyAction::Playlist => SpotifyApiAction::Playlist,
         SpotifyAction::PlaylistItems => SpotifyApiAction::PlaylistItems,
         SpotifyAction::NextTrack => SpotifyApiAction::NextTrack,
     }

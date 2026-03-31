@@ -5,6 +5,7 @@ url = "https://api.spotify.com/"
 currently-playing = "v1/me/player/currently-playing"
 my-playlists = "v1/me/playlists"
 library = "v1/me/library"
+playlist = "v1/playlists/{id}"
 playlist-items = "v1/playlists/{id}/items"
 next-track = "v1/me/player/next"
 
